@@ -49,7 +49,7 @@ import urllib.error
 import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
-DM_PATH = HERE.parent.parent / "dharmamitra-translate" / "scripts" / "dm_translate.py"
+DM_PATH = HERE / "dm_translate.py"   # sibling in rails/machine-translate/scripts/
 _spec = importlib.util.spec_from_file_location("dm_translate", DM_PATH)
 dm = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(dm)
@@ -180,6 +180,15 @@ SAFETY_OFF = [
               "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT")
 ]
 
+PRIMED_NOTE = """
+**Primed run.** Unlike a zero-shot baseline, every batch was given the locked
+terms of its verses from the track glossary (`{glossary}`, built by
+`keyword-standardize`) as fixed terminology. The output has not been checked
+against them or by a person: the checked translation is built from it in its
+own `<lang>-<grade>/` folder.
+"""
+
+
 ABOUT_TEMPLATE = """---
 title: "{tag} — Gemini zero-shot ({lang})"
 track_type: machine-baseline
@@ -200,7 +209,7 @@ A **machine baseline**, not a rails-governed translation track.
 
 Every file here is raw output of Google Gemini (model `{model}`, recorded per
 block in the ledger as `model_version`), produced by
-`4-SYSTEM/Skills/gemini-translate/scripts/gm_translate.py`, which sends a small
+`4-SYSTEM/Skills/machine-translate/scripts/gm_translate.py`, which sends a small
 batch of adjacent block IDs per call and asks for a JSON object holding one
 array of lines per block. Nothing in it passed through `2-RAILS/`: no
 verse-context package, no consolidated bilingual glossary, no per-track
@@ -245,9 +254,9 @@ accepted silently. Anything still divergent is recorded with
 Regenerate or extend with:
 
 ```bash
-python3 4-SYSTEM/Skills/gemini-translate/scripts/gm_translate.py \\
+python3 4-SYSTEM/Skills/machine-translate/scripts/gm_translate.py \\
   --source "1-SOURCES/Text/<text>.md" --lang {lang}
-python3 4-SYSTEM/Skills/gemini-translate/scripts/gm_translate.py \\
+python3 4-SYSTEM/Skills/machine-translate/scripts/gm_translate.py \\
   --source "1-SOURCES/Text/<text>.md" --lang {lang} --headings     # section headings
 ```
 
@@ -284,7 +293,7 @@ def make_batches(todo, args):
         c, l = len(b["text"]), len(b["lines"])
         if cur and (
             len(cur) >= args.batch
-            or b["heading"] != cur[-1]["heading"]
+            or (b["heading"] != cur[-1]["heading"] and not getattr(args, "cross_headings", False))
             or chars + c > args.batch_max_chars
             or nlines + l > args.batch_max_lines
         ):
@@ -477,6 +486,10 @@ def main():
     p.add_argument("--style", default=None, help="style instruction, verbatim")
     p.add_argument("--style-file", default=None)
     p.add_argument("--context-header", default=None)
+    p.add_argument("--glossary-max-hits", type=int, default=15,
+                   help="max glossary entries offered per call (default 15). A term-locked run "
+                        "that sends a whole termbase must raise it, or locks past the cap are "
+                        "dropped (a warning names how many)")
     p.add_argument("--glossary", default=None,
                    help="optional 'source<TAB>target' lines; matching entries join the context")
     p.add_argument("--reference-track", default=None,
@@ -500,6 +513,9 @@ def main():
                    help="transclusion (default): an Obsidian ![[src#^id]] above each block")
     p.add_argument("--transclusion-target", default=None,
                    help="link target for the transclusion layout (default: the source stem)")
+    p.add_argument("--cross-headings", action="store_true",
+                   help="let a batch span section headings (for commentaries whose sa bcad puts "
+                        "a heading above almost every block; ids keep the blocks apart)")
     p.add_argument("--headings", action="store_true",
                    help="translate the section headings (^N-0 units, level >= 2) in one call "
                         "instead of the blocks; the H1 is never translated")
@@ -514,10 +530,11 @@ def main():
     src_path = pathlib.Path(args.source)
     if not src_path.exists():
         sys.exit(f"source not found: {src_path}")
-    if "1-SOURCES" not in str(src_path.resolve()):
+    meta, units = dm.parse_source(src_path)
+    # A file derived from 1-SOURCES (block-ID'd passages cut from a transcluded commentary) says so in its frontmatter.
+    if "1-SOURCES" not in str(src_path.resolve()) and not str(meta.get("derived_from") or "").startswith("1-SOURCES/"):
         sys.exit(f"refusing: source must be a note under 1-SOURCES/ ({src_path})")
 
-    meta, units = dm.parse_source(src_path)
     all_blocks = [u for u in units if u["kind"] == "block" and u["id"]]
     # FORK(21-taras-rails): --headings makes the ^N-0 heading units the work
     # list. Each is a one-line "block" to the transport, so the JSON schema and
@@ -612,7 +629,8 @@ def main():
         if not about.exists():
             about.write_text(ABOUT_TEMPLATE.format(
                 tag=args.lang_tag, lang=args.lang, model=args.model, endpoint=endpoint,
-                today=_dt.date.today().isoformat(), track=out_dir), encoding="utf-8")
+                today=_dt.date.today().isoformat(), track=out_dir)
+                + (PRIMED_NOTE.format(glossary=args.glossary) if args.glossary else ""), encoding="utf-8")
             print(f"seeded {about}")
         style_md = out_dir / "style.md"
         if not style_md.exists():
@@ -648,11 +666,16 @@ def main():
                                             if r.get("line_parity") is False and not dm.is_heading_record(r)),
             },
             "warning": (
-                "> [!warning] Machine baseline — not a rails-governed translation.\n"
+                "> [!warning] Machine draft — not a rails-governed translation.\n"
                 "> Every line below is raw Google Gemini output (model in the frontmatter), "
-                "produced in small batches of adjacent blocks under a JSON line schema, with "
-                "no termbase, no verse-context rails, and no human review. It is a first "
-                "display translation and a drafting aid only. See `about.md` in this folder."
+                "produced in small batches of adjacent blocks under a JSON line schema. "
+                + (f"Each batch was given the locked terms of its verses from the track glossary "
+                   f"(`{args.glossary}`) as fixed terminology, but the text has not been checked "
+                   f"against them, against verse-context rails, or by a person. "
+                   if args.glossary else
+                   "No termbase or glossary, no verse-context rails, and no human review. ")
+                + "It is a drafting aid only; the checked translation lives in its own "
+                "`<lang>-<grade>/` folder. See `about.md` in this folder."
             ),
         }
         dm.render(out_md, units, ordered, meta, args, src_rel, prov=prov, extra_fm=extra_fm)
@@ -750,9 +773,9 @@ def main():
                  if dm.is_heading_record(r) == bool(args.headings)
                  and r["block_id"] in order and order[r["block_id"]] < first_pos]
         prior.sort(key=lambda r: order[r["block_id"]])
-        combined = {"text": "\n".join(u["text"] for u in batch)}
+        combined = {"text": "\n".join(u["text"] for u in batch), "ids": [u["id"] for u in batch]}
         return dm.build_context(header, prior, combined, glossary,
-                                args.context_blocks, args.context_cap)
+                                args.context_blocks, args.context_cap, args.glossary_max_hits)
 
     def solo(unit, first=None):
         """Translate one block alone until its line count matches. Returns

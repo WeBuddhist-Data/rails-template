@@ -9,7 +9,7 @@ description: >
   divisions are stated separately from the running prose (a table of contents, an
   editor's synopsis, titled/numbered sections, adhikara labels), or must be inferred
   from topic transitions. A Tibetan text that announces its own divisions *inline*
-  (sa bcad) uses `toc-generate` instead; a vault running that pipeline already has
+  (sa bcad) uses `commentary-toc-extract` instead; a vault running that pipeline already has
   this structure in the QC-clean tree at 2-RAILS/Sections/Raw/toc-tree/<id>.md and does not
   need this skill for that source.
 ---
@@ -17,7 +17,7 @@ description: >
 # structural-outline-ingest
 
 > **Which skill do you want?** This one, when the source's structure is stated
-> **separately** from its prose, or must be inferred. `toc-generate`, when a
+> **separately** from its prose, or must be inferred. `commentary-toc-extract`, when a
 > Tibetan text announces its divisions **inline** (*sa bcad*) — that pipeline
 > produces a QC-verified tree rail at `2-RAILS/Sections/Raw/toc-tree/<id>.md` which
 > already carries this structure, so do not run both on the same source.
@@ -49,7 +49,7 @@ Recommended order when multiple sources exist for the same text:
 3. Any other available source, in order of how developed its own structural markers are.
 
 After running this skill on two or more sources for the same chapter, run the
-**combined-outline synthesis** step (`section-summary-combined`, or the
+**combined-outline synthesis** step (`section-summary` (Phase 2), or the
 equivalent compiler registered in your vault) to synthesise them into
 `2-RAILS/Sections/<node-id>.md`. If only one source exists, its outline file **is** the
 outline for that chapter until a second one arrives.

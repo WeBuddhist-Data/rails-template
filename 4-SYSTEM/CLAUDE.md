@@ -186,7 +186,7 @@ Rules:
 - `####` headings use `^N-N-N-0`.
 - The `0` in the final position is **reserved** for the heading; original-text blocks always start at `1`.
 - **Heading IDs use the full path of the structural tree plus the `-0` slot — there is no segment cap.** A division numbered `1.2.2.1.1.4` gets `^1-2-2-1-1-4-0`. Never flatten or truncate a deep tree to fit a shorter ID.
-- Markdown heading level follows tree depth (`##` = top-level division, one `#` per level deeper). Markdown stops at `######`; nodes deeper than that keep `######` and wrap the title in `**bold**`, with the full-path block ID carrying the real depth.
+- Markdown heading level follows tree depth (`##` = top-level division, one `#` per level deeper, with no cap: the `#` count is the block-ID path length plus one). Headings deeper than `######` also wrap the title in `**bold**`, since Markdown renders only six levels; the full-path block ID stays authoritative and the `#` count must agree with it.
 - No zero-padding on any segment.
 
 ---
@@ -287,7 +287,7 @@ One finished, QC-clean decimal-numbered structural tree per commentary: `Section
 
 A tree is tied to one exact version of its source file. If the commentary is re-segmented or edited after a tree was built, the tree is stale and must be rebuilt, not reused.
 
-Authoring skill: `toc-generate`.
+Authoring skills: `commentary-toc-extract` + `commentary-toc-ingest` (root texts: `root-text-toc-extract` + `root-text-toc-ingest`).
 
 ### `Claims/` — per-commentary inventories and consolidated topic pages *(optional)*
 
@@ -436,10 +436,10 @@ Skills are reusable, step-by-step procedures stored in `4-SYSTEM/Skills/`. Each 
 | **Formatting and structure** | |
 | Format a root text | `format-root-text` · `format-tibetan-root-text` · `format-sanskrit-root-text` |
 | Format a commentary (OCR repair happens here, nowhere else) | `format-commentary` |
-| Break a commentary into citable blocks | `segment-commentary` |
+| Break a commentary into citable blocks | `commentary-pipeline` (`commentary-segment`, `commentary-resegment`) |
 | Add or re-add block IDs | `add-block-ids` |
 | Insert root-verse transclusions into a commentary | `transclusion` |
-| Build a structural outline / table of contents | `toc-generate` (sa bcad) · `structural-outline-ingest` · `add-toc` |
+| Build a structural outline / table of contents | `commentary-pipeline` / `root-text-pipeline` (sa bcad) · `structural-outline-ingest` · `add-toc` |
 | Tag inline structural announcements | `tag-inline-toc` |
 | **Metadata** | |
 | Fill a file's frontmatter | `frontmatter` |

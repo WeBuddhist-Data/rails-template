@@ -8,7 +8,7 @@ description: >
   Trigger on "format this commentary", "normalise this commentary", "fix the OCR in
   this file", "clean up the headings", "prepare this commentary".
 
-  Runs BEFORE `segment-commentary`. This is where OCR repair belongs — the segmentation
+  Runs BEFORE `commentary-segment`. This is where OCR repair belongs — the segmentation
   skills are forbidden from altering text, so anything not fixed here stays broken.
 ---
 
@@ -33,7 +33,7 @@ re-measure on your own file before trusting any of them.
 (`། ` / `།།` / `། །`) ends a line, with Botok Unicode normalisation, wikilink
 unwrapping and `>`-marker removal. Run it when a file arrives as fixed-width
 wrapped text or one giant run, and you want the one-clause-per-line shape that
-`segment-commentary` Phase 2 expects.
+`commentary-segment` expects.
 
 ```bash
 python3 4-SYSTEM/Skills/format-commentary/scripts/shad_linebreak.py <input.md>   # -> <input>_segmented.md
@@ -43,9 +43,9 @@ It writes a new `_segmented` file and never touches the original, sets
 `status: 1-segmented` in the frontmatter, and keeps a leading `༄༅། །` yig-mgo
 attached to the text that follows it. It **does** normalise Unicode, so it is a
 `format-commentary` step (this is the OCR/normalisation stage), not a
-`segment-commentary` one.
+`commentary-segment` one.
 
-**This is the OCR-repair step, and the only one.** `segment-commentary` and
+**This is the OCR-repair step, and the only one.** `commentary-segment` and
 `add-block-ids` are both bound by a no-loss assertion and cannot fix a broken
 character. If a commentary reaches them still damaged, the damage is permanent for
 everything downstream that cites it. Do the repair here, and where a reading is
@@ -85,15 +85,17 @@ slot.**
 | 4 | `####` | Sub-section | `^N-N-N-0` |
 | 5 | `#####` | Sub-sub-section | `^N-N-N-N-0` |
 | 6 | `######` | Fifth-level node | `^N-N-N-N-N-0` |
-| 7+ | `######` + `**bold**` title | Deeper nodes | full path + `-0` |
+| 7 | `#######` + `**bold**` title | Sixth-level node | `^N-N-N-N-N-N-0` |
+| 8+ | one more `#` per level + `**bold**` title | Deeper nodes | full path + `-0` |
 
 - The first `##` section immediately following the title is numbered `0`
   (e.g. `## 0. མཆོད་བརྗོད། ^0-0`); subsequent sections are `1.`, `2.`, …
 - **There is no segment cap.** A node at `1.2.2.1.1.4` in the tree gets
   `^1-2-2-1-1-4-0`. Never flatten, merge, or truncate a deep tree to fit a
-  shorter ID. Markdown stops at `######`; depth beyond six is carried by the
-  block ID, with the heading title wrapped in `**bold**` so the extra depth is
-  visible.
+  shorter ID. The number of `#` is always the block-ID path length plus one,
+  with no cap; headings deeper than `######` also wrap the title in `**bold**`
+  (Obsidian renders only six heading levels, so they display as plain text;
+  the parser reads depth from the `#` count and drops the `**`).
 - **Every heading takes a block ID**, written inline at the end of the heading
   line. (An older version of this skill said the opposite — "do NOT add block
   IDs to any heading level". That rule is retired; a parser expecting `^N-0`

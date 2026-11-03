@@ -71,6 +71,7 @@ another plan in this vault or another vault.
 | `verse-distribution` | Verses per day, start date, and any dates to skip. | 2 verses/day, start 2026-07-06, skip Sundays |
 | `naming` | The day-file name pattern and whether `days/` is flat or grouped. | `day-{day}-ch{chapter}-v{start}-{end}.md`, flat |
 | `consumer` | Who reads the day files: `app` / `notification` / `obsidian`. Decides inline-vs-transclude. | `app` |
+| `content-pools` | Optional. A supplementary collection each day takes one item from (stories, images, introductions), with: the source file per stream and its per-item block-ID pattern, the pool size, and the draw rule — `sequential` (day N = item N) or `random-without-replacement`. Each day records its item in frontmatter as `<pool>_number:`. | `story`: 28 items, `^1-<M>-0`/`^1-<M>`, random-without-replacement |
 
 If a needed input is missing, stop and ask. A plan scaffolded with guessed
 parameters is worse than no plan, because the day generator will honour the
@@ -144,6 +145,12 @@ The four types:
   within the declared ceiling, voice and formula.
 - **Translated** — rendered from the corresponding section of the authoring
   stream's day file. Only translation streams have these.
+
+A section whose content is one item of a declared **content pool** is `Extracted`
+with `grounding: pool:<name>` — copied (or, for `consumer: obsidian`, transcluded)
+by the item's block ID. Every stream's pool source must carry the **same**
+block-ID numbering before the first day is generated; adding missing anchors is
+a permitted structural edit (`add-block-ids`), never a wording change.
 
 Example row set (the ids are generic; the headings, ceilings and formulas are
 whatever the human declares):
@@ -290,7 +297,7 @@ Authoring stream first, then translation streams. For each:
    *list* stays in `About <plan>.md`; `requirements.md` says how this language
    renders it.
 2. `termbase.md` from the template. Where the vault has a consolidated
-   `2-RAILS/Bilingual-Glossaries/<src>-<tgt>.md`, seed it with `glossary-select`; otherwise leave
+   `2-RAILS/Bilingual-Glossaries/<src>-<tgt>.md`, seed it with `bilingual-glossary` (Phase 4); otherwise leave
    the table empty with its columns in place.
 3. For translation streams: `termbase-translation.md` from the template, with
    `forked_from:` set and an empty "Pending terms" table.

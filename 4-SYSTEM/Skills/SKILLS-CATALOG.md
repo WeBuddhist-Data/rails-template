@@ -26,6 +26,14 @@ intake ─→ format ─→ structure ─→ segment & ID ─→ metadata
 
 ## 1. Intake — raw material into `1-SOURCES/`
 
+### `aligned-corpus-intake`
+Turns a corpus that humans already segmented and aligned (OpenPecha API downloads, Google-Docs exports of line-parallel alignments, sentence segmentations, citation and sa bcad TOC docs) into vault source files with block IDs and transclusions, and verifies the build against its inputs.
+→ [`aligned-corpus-intake/SKILL.md`](aligned-corpus-intake/SKILL.md)
+
+### `wiki-toc-import`
+Takes a text's table of contents from its proofread Wikisource Index page (or its Wikipedia article) and applies it as headings with block IDs to the root text, its translations and its commentaries.
+→ [`wiki-toc-import/SKILL.md`](wiki-toc-import/SKILL.md)
+
 ### `epub-to-markdown`
 Converts an EPUB into structured markdown, inspecting the book's own internal structure first and then either reusing a publisher-specific converter or writing one for it. Converters live in `epub-to-markdown/converters/`.
 → [`epub-to-markdown/SKILL.md`](epub-to-markdown/SKILL.md)
@@ -76,9 +84,53 @@ Formats a commentary: repairs OCR damage, structures the headings, normalises sp
 
 ## 3. Structure and table of contents
 
-### `toc-generate`
-Builds a text's structural outline end to end where the commentary announces its own divisions inline (the Tibetan *sa bcad* case): scan for candidates, copy the division announcements verbatim, reconcile them into one nested decimal tree, verify that tree against the source with two deterministic checkers, and ingest it back into the text as headings with block IDs. Phases are separately addressable.
-→ [`toc-generate/SKILL.md`](toc-generate/SKILL.md)
+### `rails-pipeline`
+Orchestrates the rails skills end to end: picks the pipeline for a goal, detects what a text already has, and runs each step with its completion checks and human gates. Does no text work itself.
+→ [`rails-pipeline/SKILL.md`](rails-pipeline/SKILL.md)
+
+### `root-text-pipeline`
+Runs the whole root-text workflow on one Tibetan root text — classify, segment, heading tree, ingest, group, block IDs — with the checks between steps. Each step is also its own skill below.
+→ [`root-text-pipeline/SKILL.md`](root-text-pipeline/SKILL.md)
+
+### `root-text-classify`
+Step 1: decides whether a text is verse, prose or mixed — or actually a commentary, which goes to `commentary-pipeline`.
+→ [`root-text-classify/SKILL.md`](root-text-classify/SKILL.md)
+
+### `root-text-segment`
+Step 2: cuts a root text into units (pādas for verse, sentences for prose) and adds the editorial frame headings.
+→ [`root-text-segment/SKILL.md`](root-text-segment/SKILL.md)
+
+### `root-text-toc-extract`
+Step 3 (model): builds the heading tree of a root text that announces its own parts — chapters named in their closing lines, rites, topic headers without an ordinal — in isolated passes, with anchors. Does not force a tree on a text that announces nothing.
+→ [`root-text-toc-extract/SKILL.md`](root-text-toc-extract/SKILL.md)
+
+### `root-text-toc-ingest`
+Step 4: puts the top-level parts of the anchored tree into the segmented text as headings.
+→ [`root-text-toc-ingest/SKILL.md`](root-text-toc-ingest/SKILL.md)
+
+### `commentary-pipeline`
+Runs the whole commentary workflow on one Tibetan commentary — pre-clean, segment, sa bcad tree, ingest, re-segment, block IDs — with the checks between steps. Each step is also its own skill below.
+→ [`commentary-pipeline/SKILL.md`](commentary-pipeline/SKILL.md)
+
+### `commentary-preclean`
+Step 1 (optional): strips earlier scaffolding — index numbers, IDs, headings, per-line breaks — back to continuous prose.
+→ [`commentary-preclean/SKILL.md`](commentary-preclean/SKILL.md)
+
+### `commentary-segment`
+Step 2: segments an OCR-clean commentary into functional units (openers, quoted root verses, explanations, frame lines).
+→ [`commentary-segment/SKILL.md`](commentary-segment/SKILL.md)
+
+### `commentary-toc-extract`
+Step 3 (model): builds the full nested decimal sa bcad tree — candidates, verbatim enumerations, tree, deterministic QC and repair, anchors — each pass an isolated subagent. Modes `sabcad`, `verses`, `top`, `labels`.
+→ [`commentary-toc-extract/SKILL.md`](commentary-toc-extract/SKILL.md)
+
+### `commentary-toc-ingest`
+Step 4: inserts the anchored tree into the segmented commentary as headings, reporting any not-found or reordered node.
+→ [`commentary-toc-ingest/SKILL.md`](commentary-toc-ingest/SKILL.md)
+
+### `seg-toc-lib`
+Support library for both pipelines: shared prompts and scripts (chunking, tree QC, ingest, text verification). Not run on its own.
+→ [`seg-toc-lib/SKILL.md`](seg-toc-lib/SKILL.md)
 
 ### `structural-outline-ingest`
 The alternative route for a text whose structure is stated rather than announced: extract the outline and write it to `2-RAILS/Sections/Raw/outline/`. Run this before verse packages — macro structure shapes how every verse under it is read.
@@ -106,9 +158,29 @@ Builds one commentary's routing index from its own outline nodes onto the canoni
 
 **Block IDs are citations.** Once anything cites a file, re-segmenting it breaks those citations silently. If you must, re-run every downstream rail.
 
-### `segment-commentary`
-Breaks a commentary into short, individually referenceable blocks — prose paragraphs, verse stanzas, quotations — so that every claim can later cite one.
-→ [`segment-commentary/SKILL.md`](segment-commentary/SKILL.md)
+### `commentary-resegment`
+Step 5 of `commentary-pipeline` (model): re-draws block boundaries into meaning-sized, citation-sized units — the model proposes merges and splits, a script applies and verifies them.
+→ [`commentary-resegment/SKILL.md`](commentary-resegment/SKILL.md)
+
+### `commentary-block-ids`
+Step 6 of `commentary-pipeline`: stamps the derived body block IDs once the headings are confirmed.
+→ [`commentary-block-ids/SKILL.md`](commentary-block-ids/SKILL.md)
+
+### `root-text-group`
+Step 5 of `root-text-pipeline` (model): groups the units of a segmented root text into stanzas and paragraphs by sense.
+→ [`root-text-group/SKILL.md`](root-text-group/SKILL.md)
+
+### `root-text-block-ids`
+Step 6 of `root-text-pipeline`: builds the final root-text file from the grouping and stamps block IDs, refusing a grouping that mixes prose and verse or crosses a heading.
+→ [`root-text-block-ids/SKILL.md`](root-text-block-ids/SKILL.md)
+
+### `bilingual-to-transclusion`
+Converts a translation that carries the root text inline (root lines, a separator, then the translation) into the vault form: a transclusion of the root block above each translated block.
+→ [`bilingual-to-transclusion/SKILL.md`](bilingual-to-transclusion/SKILL.md)
+
+### `commentary-realign`
+Re-aligns a commentary that is aligned to one root text to a second root text containing the same passages, by carrying the existing alignment across.
+→ [`commentary-realign/SKILL.md`](commentary-realign/SKILL.md)
 
 ### `add-block-ids`
 Adds block IDs so every verse, prose block and heading can be cited and transcluded. Modes for commentaries, root texts, and texts with no internal numbering.
@@ -161,6 +233,14 @@ Creates or updates the article for one key term in `2-RAILS/Local-Wiki/`, holdin
 
 ## 8. Terminology and glossaries
 
+### `keyword-standardize`
+Standardises the target-language keywords of a block-ID'd Tibetan text before translation when no human translation in that language exists to attest against.
+→ [`keyword-standardize/SKILL.md`](keyword-standardize/SKILL.md)
+
+### `zh-keyword-standardize`
+Alias of `keyword-standardize` for Chinese, kept so older commands and notes still work.
+→ [`zh-keyword-standardize/SKILL.md`](zh-keyword-standardize/SKILL.md)
+
 ### `interlinear-gloss`
 For one root text plus one translation, builds a token-aligned gloss file under `2-RAILS/Bilingual-Glossaries/Raw/`. Token-level alignment happens here once, so every downstream glossary step reads from one place.
 → [`interlinear-gloss/SKILL.md`](interlinear-gloss/SKILL.md)
@@ -191,6 +271,18 @@ For a block-aligned Pāli source and an English translation, extracts every atte
 
 *Optional — for vaults that compare what many commentaries assert. See [`../../2-RAILS/About Rails.md`](../../2-RAILS/About%20Rails.md) §6b.*
 
+### `wiki-article-inventory`
+Checks, for every article subject, whether the target Wikipedia already has the article (title variants and Wikidata sitelinks) and saves a dated inventory.
+→ [`wiki-article-inventory/SKILL.md`](wiki-article-inventory/SKILL.md)
+
+### `wiki-article-from-claims`
+Drafts a cited Tibetan Wikipedia article from one consolidated claims topic page, with verbatim, character-verified quotations.
+→ [`wiki-article-from-claims/SKILL.md`](wiki-article-from-claims/SKILL.md)
+
+### `gemini-article-polish`
+Re-composes an existing wiki article's Tibetan prose with Gemini for flow and register while freezing every fact, ref, quotation and heading, with deterministic post-checks.
+→ [`gemini-article-polish/SKILL.md`](gemini-article-polish/SKILL.md)
+
 ### `commentary-claims`
 Extracts every distinct claim one commentary makes into one claims file, in the commentary's own language, each cited to a block ID, from that commentary read in isolation.
 → [`commentary-claims/SKILL.md`](commentary-claims/SKILL.md)
@@ -208,6 +300,14 @@ The article pipeline: classify each queued term as a standalone subject, section
 ## 10. Transformations — translation
 
 **Lock the vocabulary before translating anything that will be published.** A machine or zero-shot output is a first look, not a release candidate.
+
+### `zh-track-prompt`
+Builds or revises the Chinese-only system prompt of a Chinese translation track, section by section, as a bilingual draft with the user.
+→ [`zh-track-prompt/SKILL.md`](zh-track-prompt/SKILL.md)
+
+### `yigchung-transfer`
+Carries the root text's `<small>` yigchung (small-script rubric) marks over to a block-aligned translation.
+→ [`yigchung-transfer/SKILL.md`](yigchung-transfer/SKILL.md)
 
 ### `machine-translate`
 Produces a machine baseline of a block-ID'd source by calling a translation API on small batches. A baseline, never a governed track.
@@ -261,6 +361,10 @@ Builds the machine-anchored per-day dossier an app consumes, then validates and 
 
 ## 12. QA and checking
 
+### `translation-segment-check`
+Report-only, segment-by-segment check that every translation block is aligned to the right root segment and translates it correctly, with verdicts grounded in the verse-aligned commentaries.
+→ [`translation-segment-check/SKILL.md`](translation-segment-check/SKILL.md)
+
 ### `translation-qa`
 MQM-based quality check of a translation against the source, the rails and the track's requirements. Appends a dated run to the track's `qa-report.md`. A section is not `complete` until it passes with no critical or major errors.
 → [`translation-qa/SKILL.md`](translation-qa/SKILL.md)
@@ -280,6 +384,22 @@ Grades one plan day file against the plan's declared session shape, its groundin
 ---
 
 ## 13. Publishing
+
+### `root-text-upload`
+Lints, parses and uploads a root text to the library backend as a text, an edition and a table of contents. The root goes first: its translations need its ids.
+→ [`root-text-upload/SKILL.md`](root-text-upload/SKILL.md)
+
+### `commentary-upload`
+Lints, parses and uploads a commentary to the library backend as its own text with an edition, a table of contents and an alignment to the root edition's segments.
+→ [`commentary-upload/SKILL.md`](commentary-upload/SKILL.md)
+
+### `yigchung-upload`
+Parses the `<small>` yigchung marks out of an uploaded root text or translation and attaches them to the edition as yigchung annotations.
+→ [`yigchung-upload/SKILL.md`](yigchung-upload/SKILL.md)
+
+### `edition-spacing-fix`
+Scans a published edition for spacing errors, records every hit in a mapping file, and after human review applies the fixes.
+→ [`edition-spacing-fix/SKILL.md`](edition-spacing-fix/SKILL.md)
 
 ### `translation-upload`
 Uploads a finished translation to the library backend: lint, parse, then create the text, edition, alignment and table of contents. Dry-run by default; `--execute` needs explicit human confirmation every time.
@@ -312,6 +432,7 @@ the job went, rather than concluding it was dropped.
 | Retired | Now done by |
 |---|---|
 | `commentary-frontmatter` | `frontmatter` |
+| `segment-commentary` | `commentary-pipeline` (steps 1–2: `commentary-preclean`, `commentary-segment`) |
 | `glossary-combine` | `bilingual-glossary` |
 | `glossary-extract-raw` | `bilingual-glossary` |
 | `glossary-select` | `bilingual-glossary` |
@@ -320,6 +441,7 @@ the job went, rather than concluding it was dropped.
 | `section-summary-combined` | `section-summary` |
 | `section-summary-raw` | `section-summary` |
 | `source-property-extractor` | `extract-source-metadata` |
+| `toc-generate` | `commentary-toc-extract` + `commentary-toc-ingest` (root texts: `root-text-toc-extract` + `root-text-toc-ingest`) |
 | `translation-frontmatter` | `frontmatter` |
 
 ---

@@ -17,26 +17,37 @@ Never writes to 1-SOURCES/. Output goes to a machine-baseline track folder under
 rails-generated translation.
 
 Endpoint: POST https://dharmamitra.org/api-search/cat-translate/v1/translate
-No API key. Stdlib only (urllib) — no pip install.
+Stdlib only (urllib) — no pip install.
+
+Authentication: if DHARMAMITRA_API_KEY is set (in the environment, or as a
+KEY=VALUE line in the vault's git-ignored $SYSTEM/scripts/.env), it is sent as
+the X-API-Key header, which lifts the public endpoint's daily quota. Without it
+the call is anonymous (public quota: 400 requests per day). The key is never
+printed, logged, or written to the ledger.
 
 Usage:
   dm_translate.py --source 1-SOURCES/Text/<file>.md --lang english
   dm_translate.py --source ... --lang german --limit 3          # smoke test
   dm_translate.py --source ... --lang english --only 1-1,1-2
   dm_translate.py --source ... --lang english --batch 1         # one block per call
+  dm_translate.py --source ... --lang english --workers 4       # 4 concurrent lanes (needs a key)
   dm_translate.py --source ... --lang english --render-only     # re-render from ledger
   dm_translate.py --source ... --list                           # parse check, no calls
 """
 
 import argparse
+import concurrent.futures
 import datetime as _dt
 import json
 import os
 import pathlib
 import re
+import ssl
 import sys
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 RATE_LIMIT_BACKOFF = [20, 40, 60, 90, 120, 180]
@@ -50,10 +61,78 @@ DAILY_LIMIT_RE = re.compile(r"per\s+1?\s*day|per\s+\d+\s*days?", re.I)
 class DailyQuotaExceeded(RuntimeError):
     """The daily request quota is spent. Retrying today cannot help."""
 
+
+class NetworkUnavailable(RuntimeError):
+    """The request cannot succeed from this machine (proxy refusal, TLS setup).
+    Retrying only wastes a minute of back-off, so it is raised at once."""
+
+
+def _ssl_context():
+    """TLS context for the API call. Uses certifi's CA bundle when it is
+    installed and the caller has not pointed SSL_CERT_FILE/SSL_CERT_DIR
+    elsewhere — python.org builds on macOS ship without a usable store, which
+    otherwise fails with CERTIFICATE_VERIFY_FAILED."""
+    if os.environ.get("SSL_CERT_FILE") or os.environ.get("SSL_CERT_DIR"):
+        return ssl.create_default_context()
+    try:
+        import certifi  # noqa: PLC0415
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001 — certifi missing: fall back to the system store
+        return ssl.create_default_context()
+
+
+def _fatal_network_error(exc):
+    """Return an explanation if `exc` cannot be fixed by retrying, else None."""
+    reason = getattr(exc, "reason", exc)
+    msg = f"{exc} {reason}"
+    host = urllib.parse.urlsplit(ENDPOINT).hostname
+    if isinstance(reason, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in msg:
+        return ("TLS certificate check failed: this Python has no usable CA bundle. "
+                "Fix: pip3 install --upgrade certifi (the script then uses it automatically), "
+                "or export SSL_CERT_FILE=$(python3 -m certifi). Not retried.")
+    if "Tunnel connection failed: 403" in msg or ("403" in msg and "proxy" in msg.lower()):
+        return (f"the network proxy refused the connection to {host} (403 at CONNECT). "
+                "This is an egress policy on this machine/sandbox, not a DharmaMitra outage. "
+                f"Run from a terminal with direct internet access, or allowlist {host}. Not retried.")
+    return None
+
 ENDPOINT = os.environ.get(
     "DHARMAMITRA_CAT_TRANSLATE_URL",
     "https://dharmamitra.org/api-search/cat-translate/v1/translate",
 )
+
+# The key that lifts the daily quota. Read from the environment first, then from
+# the vault's git-ignored 4-SYSTEM/scripts/.env (cwd = vault root, or the vault
+# this script is installed in; $DHARMAMITRA_ENV_FILE overrides the location). It is a credential: never print it, never pass it
+# on the command line, never commit it, never copy it into another vault's files.
+API_KEY_VAR = "DHARMAMITRA_API_KEY"
+
+
+def load_api_key():
+    """Return (key, where-it-came-from) or ("", "none")."""
+    key = os.environ.get(API_KEY_VAR, "").strip()
+    if key:
+        return key, "environment"
+    script_vault = pathlib.Path(__file__).resolve().parents[3]   # <vault>/4-SYSTEM when installed
+    candidates = [pathlib.Path(os.environ["DHARMAMITRA_ENV_FILE"])] if os.environ.get("DHARMAMITRA_ENV_FILE") else []
+    candidates += [pathlib.Path("4-SYSTEM/scripts/.env"), script_vault / "scripts" / ".env"]
+    for env_file in candidates:
+        try:
+            text = env_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("export "):
+                line = line[7:].strip()
+            if line.startswith(API_KEY_VAR + "="):
+                key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if key:
+                    return key, str(env_file)
+    return "", "none"
+
+
+API_KEY, API_KEY_SOURCE = load_api_key()
 
 BLOCK_ID_RE = re.compile(r"[ \t]\^([A-Za-z0-9][A-Za-z0-9._-]*)[ \t]*$")
 
@@ -106,8 +185,8 @@ LANG_NAMES = {
 PRESERVE_FM_KEYS = [
     "title", "title_original", "title_attested", "title_source", "alt_titles",
     "translator", "license", "category_id", "edition_type", "source",
-    "bdrc_work_id", "text_id", "edition_id", "toc_id", "previous_edition_id",
-    "translation_of_text_id", "translation_of_edition_id",
+    "bdrc_work_id", "text_id", "edition_id", "toc_id", "aligned_to_edition_id", "previous_edition_id",
+    "translation_of", "translation_of_text_id", "translation_of_edition_id",
     "imported_from", "import_note",
 ]
 
@@ -219,7 +298,14 @@ def parse_source(path):
 
 
 def load_glossary(path):
-    """Read `source term<TAB or ' -> '>target rendering` lines. Comments with #."""
+    """Read `source<TAB>target[<TAB>block ids]` lines (also `source -> target`,
+    `source → target`, `source | target`). Comments with #.
+
+    The optional third, tab-separated column scopes a line to block IDs
+    (`དབང<TAB>empowerment<TAB>2-3`): it is only offered for batches containing
+    one of those blocks. graded-translate/scripts/termbase_to_glossary.py writes
+    this for forms whose rendering depends on the verse. Returns
+    [(source, target, frozenset(ids) | None)]."""
     if not path:
         return []
     entries = []
@@ -227,21 +313,44 @@ def load_glossary(path):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        for sep in ("\t", " -> ", " → ", "|"):
+        if "\t" in line:
+            cols = [c.strip() for c in line.split("\t")]
+            scope = frozenset(x.strip() for x in cols[2].split(",") if x.strip()) if len(cols) > 2 and cols[2] else None
+            entries.append((cols[0], cols[1] if len(cols) > 1 else "", scope))
+            continue
+        for sep in (" -> ", " → ", "|"):
             if sep in line:
                 src, tgt = line.split(sep, 1)
-                entries.append((src.strip().strip("|").strip(), tgt.strip().strip("|").strip()))
+                entries.append((src.strip().strip("|").strip(), tgt.strip().strip("|").strip(), None))
                 break
-    return [e for e in entries if e[0] and e[1]]
+    entries = [e for e in entries if e[0] and e[1]]
+    unscoped = {}
+    for s, tgt, scope in entries:
+        if scope is None:
+            unscoped.setdefault(s, set()).add(tgt)
+    for s, tgts in unscoped.items():
+        if len(tgts) > 1:
+            print(f"warning: glossary gives '{s}' several unscoped renderings {sorted(tgts)}; "
+                  f"every matching call receives all of them — add a block-ID column", file=sys.stderr)
+    return entries
 
 
-def build_context(header, done, unit, glossary, window, char_cap):
-    """Compose the `context` field: work header + glossary hits + rolling prior blocks."""
+def build_context(header, done, unit, glossary, window, char_cap, max_hits=15):
+    """Compose the `context` field: work header + glossary hits + rolling prior blocks.
+
+    `max_hits` (`--glossary-max-hits`) caps the glossary entries offered per call.
+    It was a hard-coded 15; a term-locked run that sends a whole termbase must
+    raise it, and a truncation is reported on stderr rather than dropped silently."""
     parts = [header.strip()] if header.strip() else []
 
-    hits = [f"{s} → {t}" for s, t in glossary if s and s in unit["text"]]
+    ids = set(unit.get("ids") or ([unit["id"]] if unit.get("id") else []))
+    hits = [f"{s} → {t}" for s, t, scope in glossary
+            if s and s in unit["text"] and (scope is None or not ids or scope & ids)]
     if hits:
-        parts.append("Terminology already fixed for this text:\n" + "\n".join(hits[:15]))
+        if len(hits) > max_hits:
+            print(f"    ! glossary: {len(hits)} entries match, only {max_hits} sent "
+                  f"(raise --glossary-max-hits)", file=sys.stderr)
+        parts.append("Terminology already fixed for this text:\n" + "\n".join(hits[:max_hits]))
 
     rolling = []
     for rec in done[-window:] if window > 0 else []:
@@ -290,7 +399,7 @@ A **machine baseline**, not a rails-governed translation track.
 
 Every file here is raw output of DharmaMitra's public `cat-translate` endpoint,
 produced in small batches of adjacent block IDs by
-`4-SYSTEM/Skills/dharmamitra-translate/scripts/dm_translate.py`, then split back
+`4-SYSTEM/Skills/machine-translate/scripts/dm_translate.py`, then split back
 apart on segment markers so each block keeps its own record. Nothing in it
 passed through `2-RAILS/`: no verse-context package, no consolidated bilingual
 glossary, no per-track `termbase.md`, no human review. It therefore does **not**
@@ -327,7 +436,7 @@ transformation.
 Regenerate or extend with:
 
 ```bash
-python3 4-SYSTEM/Skills/dharmamitra-translate/scripts/dm_translate.py \\
+python3 4-SYSTEM/Skills/machine-translate/scripts/dm_translate.py \\
   --source "{src}" --lang {lang}
 ```
 """
@@ -441,15 +550,14 @@ def build_body(batch, ctx, args):
 def call_api(body, timeout, retries, verbose=False):
     """POST one block. Backs off hard on 429 — the endpoint is public and shared."""
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if API_KEY:
+        headers["X-API-Key"] = API_KEY
     last = None
     for attempt in range(1, retries + 1):
-        req = urllib.request.Request(
-            ENDPOINT, data=data,
-            headers={"Content-Type": "application/json", "Accept": "application/json"},
-            method="POST",
-        )
+        req = urllib.request.Request(ENDPOINT, data=data, headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             text = (payload.get("translation") or "").strip()
             if not text:
@@ -480,6 +588,9 @@ def call_api(body, timeout, retries, verbose=False):
             time.sleep(wait)
         except Exception as exc:  # noqa: BLE001 — network/parse failures, then back off
             last = exc
+            fatal = _fatal_network_error(exc)
+            if fatal:
+                raise NetworkUnavailable(fatal) from exc
             if attempt < retries:
                 wait = 2 ** attempt
                 print(f"    ! attempt {attempt}/{retries} failed ({exc}); retrying in {wait}s",
@@ -517,6 +628,16 @@ def read_frontmatter(path):
         if m:
             meta[m.group(1)] = m.group(2).strip().strip('"')
     return meta
+
+
+# The API sometimes wraps Sanskrit/Tibetan terms in markdown emphasis (*uṣṇīṣa*).
+# The note is the upload source, so the asterisks would reach the edition content
+# as literal characters; they are dropped at render time (the ledger keeps them).
+EMPHASIS_RE = re.compile(r"(?<![\w*])\*{1,2}(?=\S)([^*\n]+?)(?<=\S)\*{1,2}(?!\*)")
+
+
+def strip_emphasis(text):
+    return EMPHASIS_RE.sub(r"\1", text)
 
 
 def is_heading_record(rec):
@@ -575,7 +696,13 @@ def render(out_md, units, ledger, meta, args, source_rel, prov=None, extra_fm=No
                             f"<={getattr(args, 'batch_max_chars', 0)} src chars, "
                             f"<={getattr(args, 'payload_cap', 0)} payload chars",
             },
-            "warning": DM_WARNING,
+            "warning": DM_WARNING if not args.glossary else (
+                "> [!warning] Machine draft — not a rails-governed translation.\n"
+                "> Every line below is raw DharmaMitra `cat-translate` output, produced in small "
+                f"batches of adjacent blocks, each given the locked terms of its verses from `{args.glossary}` "
+                "as a hint; it has not been checked against them, against verse-context rails, or by a "
+                "person. It is a drafting aid only; the checked translation lives in its own "
+                "`<lang>-<grade>/` folder. See `about.md` in this folder."),
         }
 
     kept = read_frontmatter(out_md)
@@ -599,6 +726,7 @@ def render(out_md, units, ledger, meta, args, source_rel, prov=None, extra_fm=No
         "file_type": "translation",
         "track_type": "machine-baseline",
         "root_text": source_rel,
+        "translation_of": keep("translation_of"),   # set by the vault linter from the source's text_id
         "translation_of_text_id": keep("translation_of_text_id", meta.get("text_id") or ""),
         "translation_of_edition_id": keep("translation_of_edition_id", meta.get("edition_id") or ""),
         "text_id": keep("text_id"),
@@ -653,7 +781,7 @@ def render(out_md, units, ledger, meta, args, source_rel, prov=None, extra_fm=No
             if level == 1:
                 text = fm["title"]
             elif unit["id"] in heads:
-                text = heads[unit["id"]]["translation"].strip().split("\n")[0]
+                text = strip_emphasis(heads[unit["id"]]["translation"].strip().split("\n")[0])
             else:
                 text = unit["text"]
             lines.append(f"{hashes} {text}{hid}")
@@ -670,7 +798,7 @@ def render(out_md, units, ledger, meta, args, source_rel, prov=None, extra_fm=No
             lines.append(f"![[{link_target}#^{unit['id']}]]")
             lines.append("")
         if rec:
-            tlines = rec["translation"].split("\n")
+            tlines = strip_emphasis(rec["translation"]).split("\n")
             tlines = [t for t in tlines if t.strip()]
             if not tlines:
                 tlines = ["[empty]"]
@@ -703,8 +831,13 @@ def main():
     p.add_argument("--style-file", default=None, help="file whose contents are the style_instruction")
     p.add_argument("--context-header", default=None,
                    help="file with the fixed work-level context prepended to every call")
+    p.add_argument("--glossary-max-hits", type=int, default=15,
+                   help="max glossary entries offered per call (default 15). A term-locked run "
+                        "that sends a whole termbase must raise it, or locks past the cap are "
+                        "dropped (a warning names how many)")
     p.add_argument("--glossary", default=None,
-                   help="optional 'source<TAB>target' lines; matching entries join the context")
+                   help="optional 'source<TAB>target[<TAB>block ids]' lines; entries whose source "
+                        "occurs in a batch join its context as a HINT (not enforced)")
     p.add_argument("--context-blocks", type=int, default=3,
                    help="how many prior translated blocks to thread back in (0 disables)")
     p.add_argument("--context-cap", type=int, default=3000, help="max chars of context")
@@ -718,8 +851,13 @@ def main():
                    help="max chars of context + style_instruction + source per call")
     p.add_argument("--only", default=None, help="comma-separated block IDs")
     p.add_argument("--limit", type=int, default=0, help="stop after N new blocks (0 = all)")
-    p.add_argument("--sleep", type=float, default=4.0,
-                   help="seconds between calls; the public endpoint rate-limits above ~10/min")
+    p.add_argument("--sleep", type=float, default=None,
+                   help="seconds between calls in each lane (default: 4 anonymous — the public "
+                        "endpoint rate-limits above ~10/min — or 0.5 with an API key)")
+    p.add_argument("--workers", type=int, default=1,
+                   help="concurrent lanes for this file (default 1). Blocks are split into N "
+                        "contiguous lanes, each keeping its own rolling context; heading calls "
+                        "are sent N at a time. Needs DHARMAMITRA_API_KEY (refused anonymously).")
     p.add_argument("--timeout", type=int, default=90, help="per-call timeout (do not lower)")
     p.add_argument("--retries", type=int, default=6)
     p.add_argument("--layout", default="transclusion",
@@ -734,6 +872,14 @@ def main():
     p.add_argument("--heading-style", default=HEADING_STYLE,
                    help="style_instruction for --headings (default: HEADING_STYLE); append e.g. "
                         "a script requirement to match the rest of the track")
+    p.add_argument("--heading-batch", type=int, default=1,
+                   help="with --headings: headings per call, split on [[n]] markers "
+                        "(1 = one call each, the default; a bad split falls back to singles)")
+    p.add_argument("--strip-marks", action="store_true",
+                   help="remove the Tibetan emphasis mark ༷ (U+0F37) from the source before sending. "
+                        "Commentaries mark quoted root words with it, and DharmaMitra then copies "
+                        "those words in Tibetan script instead of translating them. Recorded in the "
+                        "ledger as source_marks_stripped.")
     p.add_argument("--extra-fm", default=None,
                    help="JSON file of frontmatter keys to seed/override on render "
                         "(researched title, backend ids, import provenance)")
@@ -742,6 +888,13 @@ def main():
     p.add_argument("--list", action="store_true", help="print parsed units and exit")
     p.add_argument("--dry-run", action="store_true", help="print request bodies, make no calls")
     args = p.parse_args()
+    if args.sleep is None:
+        args.sleep = 0.5 if API_KEY else 4.0
+    args.workers = max(1, args.workers)
+    if args.workers > 1 and not API_KEY and not (args.list or args.render_only or args.dry_run):
+        sys.exit(f"--workers {args.workers} needs {API_KEY_VAR} (the anonymous endpoint allows "
+                 f"400 calls/day and rate-limits bursts). Put it in the git-ignored "
+                 f"$SYSTEM/scripts/.env, or run with --workers 1.")
 
     src_path = pathlib.Path(args.source)
     if not src_path.exists():
@@ -750,6 +903,10 @@ def main():
         print(f"note: source is outside 1-SOURCES/ ({src_path})", file=sys.stderr)
 
     meta, units = parse_source(src_path)
+    if args.strip_marks:
+        for u in units:
+            if u["kind"] == "block" and u.get("text"):
+                u["text"] = u["text"].replace("\u0f37", "")
     blocks = [u for u in units if u["kind"] == "block" and u["id"]]
 
     if args.list:
@@ -788,6 +945,8 @@ def main():
     # silently told the API that all 95 English texts were that first work.
     title = meta.get("title_in_english") or meta.get("title") or src_path.stem
     author = meta.get("author_in_english") or meta.get("author") or "unknown"
+    # Authority tags ("Name [bdrc:P123]") are for the uploader, not the translator.
+    title, author = (re.sub(r"\s*\[(?:bdrc|op):[^\]]*\]", "", str(x)).strip() for x in (title, author))
     work_line = (f"Work: {title} (author: {author}). A canonical Tibetan text; "
                  f"the blocks below are being translated one at a time, in order.")
 
@@ -823,6 +982,9 @@ def main():
 
     if not args.dry_run:
         seed_track(out_dir, meta, args, src_rel, slug)
+    if not args.render_only:
+        print(f"auth       : {'X-API-Key from ' + API_KEY_SOURCE if API_KEY else 'none (public quota: 400 calls/day)'}"
+              f"   workers={args.workers} sleep={args.sleep}s")
 
     def latest_records():
         """Newest record per id, blocks in source order, then headings."""
@@ -854,38 +1016,86 @@ def main():
         print(f"target     : {args.lang} ({args.lang_tag})   mode=headings")
         print(f"track      : {out_dir}")
         print(f"headings   : {len(heading_units)} total, {len(done_heads)} already in ledger, {len(todo)} to do")
-        n_done = 0
-        for i, hu in enumerate(todo, 1):
-            body = build_body([hu], header, args)
-            print(f"[{i}/{len(todo)}] ^{hu['id']}  {hu['text'][:40]} … ", end="", flush=True)
-            if args.dry_run:
-                print("(dry run)")
-                print(json.dumps(body, ensure_ascii=False, indent=2))
-                continue
-            t0 = time.time()
-            try:
-                one = call_api(body, args.timeout, args.retries)
-            except RuntimeError as exc:
-                print(f"\nSTOPPED at ^{hu['id']}: {exc}", file=sys.stderr)
-                break
-            el = time.time() - t0
+        # --heading-batch N > 1 sends N headings per call under the same [[n]]
+        # marker protocol as blocks; a bad split falls back to one call each.
+        hb = max(1, args.heading_batch)
+        hbatches = [todo[i:i + hb] for i in range(0, len(todo), hb)]
+        print(f"calls      : {len(hbatches)} (<= {hb} heading(s) per call)")
+        lock, stop = threading.Lock(), threading.Event()   # shared by --workers threads
+
+        def record_heading(hu, one, el, batch_ids, fell_back):
             translation = one.strip().split("\n")[0].strip().strip('"').strip("'")
             rec = {
                 "block_id": hu["id"], "kind": "heading", "heading": None,
                 "source": hu["text"], "translation": translation,
                 "target_language": args.lang, "focus": args.focus,
                 "style_instruction": args.style, "context": header, "endpoint": ENDPOINT,
-                "batch_size": 1, "batch_block_ids": [hu["id"]], "batch_fallback": False,
+                "batch_size": len(batch_ids), "batch_block_ids": batch_ids,
+                "batch_fallback": fell_back,
                 "elapsed_s": round(el, 2),
                 "ts": _dt.datetime.now().isoformat(timespec="seconds"),
             }
-            ledger.append(rec)
-            with ledger_path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            n_done += 1
-            print(f"{el:.1f}s  {translation[:60]}")
-            if args.sleep and i < len(todo):
+            with lock:
+                ledger.append(rec)
+                with ledger_path.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            return translation
+
+        n_done = 0
+
+        def say(msg, err=False):
+            with lock:
+                print(msg, file=sys.stderr if err else sys.stdout, flush=True)
+
+        def do_hbatch(i, hbatch):
+            """One heading call (or its one-by-one fallback); False stops the run."""
+            nonlocal n_done
+            if stop.is_set():
+                return
+            ids = [hu["id"] for hu in hbatch]
+            label = f"[{i}/{len(hbatches)}] ^{',^'.join(ids)}  {hbatch[0]['text'][:40]} …"
+            t0 = time.time()
+            try:
+                out = call_api(build_body(hbatch, header, args), args.timeout, args.retries)
+            except RuntimeError as exc:
+                stop.set()
+                say(f"STOPPED at ^{ids[0]}: {exc}", err=True)
+                return
+            el = time.time() - t0
+            segs = split_batch_response(out, len(hbatch))
+            if segs is not None:
+                for hu, seg in zip(hbatch, segs):
+                    last = record_heading(hu, seg, el, ids, False)
+                with lock:
+                    n_done += len(hbatch)
+                say(f"{label} {el:.1f}s  {last[:60]}")
+            else:
+                say(f"{label} {el:.1f}s  ! marker split failed; retrying {len(hbatch)} heading(s) singly")
+                for hu in hbatch:
+                    if args.sleep:
+                        time.sleep(args.sleep)
+                    t0 = time.time()
+                    try:
+                        one = call_api(build_body([hu], header, args), args.timeout, args.retries)
+                    except RuntimeError as exc:
+                        stop.set()
+                        say(f"STOPPED at ^{hu['id']}: {exc}", err=True)
+                        return
+                    last = record_heading(hu, one, time.time() - t0, [hu["id"]], True)
+                    with lock:
+                        n_done += 1
+                    say(f"    ^{hu['id']} … {last[:60]}")
+            if args.sleep:
                 time.sleep(args.sleep)
+
+        if args.dry_run:
+            for i, hbatch in enumerate(hbatches, 1):
+                print(f"[{i}/{len(hbatches)}] ^{',^'.join(hu['id'] for hu in hbatch)} … (dry run)")
+                print(json.dumps(build_body(hbatch, header, args), ensure_ascii=False, indent=2))
+            return
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+            for fut in [pool.submit(do_hbatch, i, hbatch) for i, hbatch in enumerate(hbatches, 1)]:
+                fut.result()
         if not args.dry_run:
             render(out_md, units, latest_records(), meta, args, src_rel, extra_fm=extra_fm)
             print(f"\nwrote {out_md}  ({n_done} heading(s) translated this run)")
@@ -915,6 +1125,7 @@ def main():
           f"<={args.batch_max_lines} lines per call)")
 
     fallbacks, diverged, n_done, stopped_at = [], [], 0, None
+    lock, stop = threading.Lock(), threading.Event()   # the ledger is shared by the lanes
 
     def record(unit, translation, elapsed, batch_ids, ctx, fell_back):
         """Append one block's result to the ledger. One record per block ID."""
@@ -923,6 +1134,7 @@ def main():
             "block_id": unit["id"],
             "heading": unit["heading"],
             "source": unit["text"],
+            **({"source_marks_stripped": True} if args.strip_marks else {}),
             "translation": translation,
             "target_language": args.lang,
             "focus": args.focus,
@@ -935,90 +1147,124 @@ def main():
             "elapsed_s": round(elapsed, 2),
             "ts": _dt.datetime.now().isoformat(timespec="seconds"),
         }
-        ledger = [r for r in ledger if r["block_id"] != unit["id"]] + [rec]
-        with ledger_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        got, want = len(translation.split("\n")), len(unit["lines"])
-        if got != want:
-            diverged.append((unit["id"], want, got))
+        with lock:
+            ledger = [r for r in ledger if r["block_id"] != unit["id"]] + [rec]
+            with ledger_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            got, want = len(translation.split("\n")), len(unit["lines"])
+            if got != want:
+                diverged.append((unit["id"], want, got))
 
     order = {b["id"]: i for i, b in enumerate(blocks)}
 
     def context_for(batch):
         """Rolling context: the blocks of this text that PRECEDE the batch, in
-        source order (never headings, never a later block)."""
+        source order (never headings, never a later block). With --workers > 1 a
+        lane's first batch sees only what earlier lanes or runs have finished."""
         ids = {u["id"] for u in batch}
         first_pos = min(order[u["id"]] for u in batch)
-        by_block, _ = latest_by_id(ledger)
+        with lock:
+            by_block, _ = latest_by_id(list(ledger))
         prior = [r for i, r in sorted((order[b], r) for b, r in by_block.items()
                                       if b in order and b not in ids and order[b] < first_pos)]
-        combined = {"text": "\n".join(u["text"] for u in batch)}
+        combined = {"text": "\n".join(u["text"] for u in batch), "ids": [u["id"] for u in batch]}
         return build_context(header, prior, combined, glossary,
-                             args.context_blocks, args.context_cap)
+                             args.context_blocks, args.context_cap, args.glossary_max_hits)
 
-    for bi, batch in enumerate(batches, 1):
+    def log(msg, err=False):
+        with lock:
+            print(msg, file=sys.stderr if err else sys.stdout, flush=True)
+
+    def run_batch(bi, batch, tag):
+        """Translate one batch; returns False if the run must stop."""
+        nonlocal n_done, stopped_at
         ids = [u["id"] for u in batch]
         ctx = context_for(batch)
         body = build_body(batch, ctx, args)
         src_field = body[SOURCE_LANG_FIELDS[args.source_language]]
         payload = len(ctx) + len(body["style_instruction"]) + len(src_field)
-
-        label = "^" + ",^".join(ids)
-        print(f"[{bi}/{len(batches)}] {label}  ({len(batch)} blk, "
-              f"{len(src_field)} src, {payload} payload) … ", end="", flush=True)
-
+        label = f"{tag}[{bi}/{len(batches)}] ^" + ",^".join(ids) + \
+            f"  ({len(batch)} blk, {len(src_field)} src, {payload} payload)"
         if args.dry_run:
-            print("(dry run)")
-            print(json.dumps(body, ensure_ascii=False, indent=2))
-            continue
-
+            log(label + " … (dry run)\n" + json.dumps(body, ensure_ascii=False, indent=2))
+            return True
         t0 = time.time()
         try:
             translation = call_api(body, args.timeout, args.retries)
         except RuntimeError as exc:
-            stopped_at = ids[0]
-            print(f"\nSTOPPED at ^{ids[0]}: {exc}", file=sys.stderr)
-            print("Ledger is intact; nothing done so far is lost. Resume with the same "
-                  "command (already-translated blocks are skipped), or raise --sleep.",
-                  file=sys.stderr)
-            break
+            with lock:
+                stopped_at = stopped_at or ids[0]
+            stop.set()
+            log(f"STOPPED at ^{ids[0]}: {exc}\nLedger is intact; nothing done so far is lost. "
+                "Resume with the same command (already-translated blocks are skipped).", err=True)
+            return False
         elapsed = time.time() - t0
-
         segs = split_batch_response(translation, len(batch))
         if segs is not None:
             for unit, seg in zip(batch, segs):
                 record(unit, seg, elapsed, ids, ctx, False)
-            n_done += len(batch)
-            print(f"{elapsed:.1f}s  {segs[0].split(chr(10))[0][:52]}")
-            if args.sleep and bi < len(batches):
-                time.sleep(args.sleep)
-            continue
-
+            with lock:
+                n_done += len(batch)
+            log(f"{label} … {elapsed:.1f}s  {segs[0].split(chr(10))[0][:52]}")
+            return True
         # Markers came back wrong -- never guess the split. Re-run one per call.
-        fallbacks.append(ids)
-        print(f"{elapsed:.1f}s  ! marker split failed; retrying {len(batch)} blocks singly",
-              flush=True)
+        with lock:
+            fallbacks.append(ids)
+        log(f"{label} … {elapsed:.1f}s  ! marker split failed; retrying {len(batch)} blocks singly")
         for unit in batch:
             if args.sleep:
                 time.sleep(args.sleep)
             solo_ctx = context_for([unit])
             solo = build_body([unit], solo_ctx, args)
-            print(f"    ^{unit['id']} … ", end="", flush=True)
             t0 = time.time()
             try:
                 one = call_api(solo, args.timeout, args.retries)
             except RuntimeError as exc:
-                stopped_at = unit["id"]
-                print(f"\nSTOPPED at ^{unit['id']}: {exc}", file=sys.stderr)
-                break
+                with lock:
+                    stopped_at = stopped_at or unit["id"]
+                stop.set()
+                log(f"STOPPED at ^{unit['id']}: {exc}", err=True)
+                return False
             el = time.time() - t0
             record(unit, one.strip(), el, [unit["id"]], solo_ctx, True)
-            n_done += 1
-            print(f"{el:.1f}s  {one.strip().split(chr(10))[0][:52]}")
-        if stopped_at:
-            break
-        if args.sleep and bi < len(batches):
-            time.sleep(args.sleep)
+            with lock:
+                n_done += 1
+            log(f"{tag}    ^{unit['id']} … {el:.1f}s  {one.strip().split(chr(10))[0][:52]}")
+        return True
+
+    def run_lane(lane, tag):
+        for bi, batch in lane:
+            if stop.is_set():
+                return
+            if not run_batch(bi, batch, tag):
+                return
+            if args.sleep and not args.dry_run:
+                time.sleep(args.sleep)
+
+    numbered = list(enumerate(batches, 1))
+    n_lanes = min(args.workers, len(numbered))
+    if n_lanes <= 1:
+        run_lane(numbered, "")
+    else:
+        # Contiguous lanes of roughly equal source size, so each keeps its own
+        # rolling context; batches never cross a heading, so neither does a cut.
+        sizes = [sum(len(u["text"]) for u in b) for _, b in numbered]
+        target, lanes, cur, acc = sum(sizes) / n_lanes, [], [], 0
+        for item, size in zip(numbered, sizes):
+            cur.append(item)
+            acc += size
+            if acc >= target * (len(lanes) + 1) and len(lanes) < n_lanes - 1:
+                lanes.append(cur)
+                cur = []
+        if cur:
+            lanes.append(cur)
+        print(f"lanes      : {len(lanes)} — " + "; ".join(
+            f"L{k + 1} ^{ln[0][1][0]['id']}…^{ln[-1][1][-1]['id']} ({len(ln)} calls)"
+            for k, ln in enumerate(lanes)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(lanes)) as pool:
+            futs = [pool.submit(run_lane, ln, f"L{k + 1} ") for k, ln in enumerate(lanes)]
+            for fut in futs:
+                fut.result()
 
     if not args.dry_run:
         # Ledger is append-only; keep the last record per block for rendering.

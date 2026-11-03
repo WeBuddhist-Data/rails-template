@@ -119,6 +119,9 @@ Never set `status: complete`. That is a domain specialist's call.
 8. **Never overwrite a day file.** Archive the existing version first.
 9. **Report in the reply, never in the file.**
 10. **`status: draft`, always.**
+11. **Content-pool numbers are copied, never redrawn.** Every `<pool>_number:`
+    in the source day file's frontmatter is carried over unchanged, and the
+    section is taken from this stream's pool source by the same block ID.
 
 ---
 
