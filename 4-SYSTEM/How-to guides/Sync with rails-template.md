@@ -53,6 +53,7 @@ Files that carry generic methodology and should stay in sync across all vaults:
 | `4-SYSTEM/Templates/` | Generic file templates, including the frontmatter schema |
 | `2-RAILS/Verses/_TEMPLATE.md` | The verse-package skeleton |
 | `AGENTS.md` | Thin pointer to `CLAUDE.md` |
+| `4-SYSTEM/scripts/{linter,parser}-{root-text,commentary}/` | The API linters and parsers. Sync all four folders together (they share `durchen.py`, byte-identical), never their `output/`, and update each `UPSTREAM.md` |
 
 ---
 
