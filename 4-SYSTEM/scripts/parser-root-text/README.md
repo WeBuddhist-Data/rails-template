@@ -6,7 +6,7 @@ Run `linter-root-text` first.
 
 ## What it does
 
-1. **extract_text_input** — takes `text_input` from the lint JSON (or `resolved` from a `.lint.errors.json`), drops empty fields and contributors without an id, writes `text.json` (includes `tag_ids`, a list, when set)
+1. **extract_text_input** — takes `text_input` from the lint JSON (or `resolved` from a `.lint.errors.json`), drops empty fields and contributors without an id, writes `text.json` (includes `tag_ids`, a list, when set). A translation (`translation_of` set) is sent without `tag_ids` or `category_id`: it inherits both from the root text, and the API refuses them on it (`tag_ids`: HTTP 404 "Work … or Tag … not found"; `category_id`: HTTP 422 "Translations inherit their category")
 2. **build_edition** — builds the edition content and its segments with character spans from the body text (headings left out), writes `edition.json`, the yigchung annotations found in `<small>…</small>`, writes `yigchungs.json`, and the durchens (variant readings) written as footnotes, writes `durchens.json`
 3. **build_toc** — builds a nested table of contents from the headings (headings are used only here), writes `toc.json`
 4. **build_alignment** — for `file_type` `translation` or `commentary` only, links segments to the root text through transclusions, writes `alignment.json`

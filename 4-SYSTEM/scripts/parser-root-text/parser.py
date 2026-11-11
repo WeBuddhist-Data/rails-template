@@ -293,6 +293,14 @@ def extract_text_input(lint_path, source_stem=None):
         raise ValueError(f"no text_input found in {lint_path.name}")
     clean = {k: v for k, v in text_input.items() if not _is_empty(v)}
 
+    # A translation inherits its tags and category from the text it translates:
+    # the API refuses tag_ids (HTTP 404) and category_id (HTTP 422) on a text
+    # created with translation_of.
+    if clean.get("translation_of"):
+        for field, inherited in (("tag_ids", "tags"), ("category_id", "category")):
+            if clean.pop(field, None) is not None:
+                print(f"  INFO {field}: not sent — a translation inherits the root text's {inherited}", file=sys.stderr)
+
     if "alt_titles" not in clean:
         print("  WARN alt_titles: missing — ignored", file=sys.stderr)
 
