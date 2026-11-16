@@ -9,6 +9,7 @@ A script that belongs to exactly one skill lives in that skill's own `scripts/` 
 | `install-skills.py` | Installs skills from the shared skill library into `4-SYSTEM/Skills/`, resolving the library's logical location names to this vault's paths and writing the `.claude/commands/` stubs. See [`../How-to guides/Sync with rails-template.md`](../How-to%20guides/Sync%20with%20rails-template.md). |
 | `linter-root-text/` · `linter-commentary/` | Lint a root text or a commentary in `1-SOURCES/` against the API rules (frontmatter, block IDs, TOC headings, yigchungs, durchens `[^dN]`, footnotes `[^fN]`, `tag_ids`) and write `output/<stem>.lint.json`. Run before the parser. See each folder's `README.md`. |
 | `parser-root-text/` · `parser-commentary/` | Turn a linted source into the API payloads in `output/<stem>/`: text, edition, TOC, yigchungs, durchens, footnotes (by position) and, for a commentary, its alignment to the root text. The four tools share `durchen.py`, kept byte-identical. Vendored: see each folder's `UPSTREAM.md`. |
+| `uploader-root-text/` | Post a parser output folder to the library API: text, edition and TOC, then the alignment to the root for a translation. It writes the returned `text_id` / `edition_id` / `toc_id` into the source `.md` frontmatter. **It sends for real unless you pass `--dry-run`**. Upload a root text before its translations. Needs `WEBUDDHIST_API_KEY` in the environment. Vendored: see its `UPSTREAM.md` and `README.md`. |
 
 ## Conventions
 
