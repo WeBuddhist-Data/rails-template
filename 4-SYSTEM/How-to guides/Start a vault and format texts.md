@@ -3,7 +3,7 @@
 This guide has two parts:
 
 1. **[Make your own vault](#part-1--make-your-own-vault-from-rails-template)** from `rails-template`, clone it, and make it yours.
-2. **[Bring a text into the vault](#part-2--bring-a-text-into-the-vault)**: turn a raw file into the format the linter and parser read, check it, and upload it.
+2. **[Bring a text into the vault](#part-2--bring-a-text-into-the-vault)**: turn a raw file into the format the linter and parser read, check it, and upload it. It includes [example requests to copy](#how-to-ask-the-ai), and [how to describe your own file's structure](#if-your-file-has-its-own-structure-describe-it-in-the-prompt) to the AI.
 
 Part 2 describes the format the way the tools actually read it. Every rule below comes from `4-SYSTEM/scripts/linter-*` and `parser-*`, and the example files in [§2.7](#27-a-complete-example) pass both.
 
@@ -103,7 +103,7 @@ received file ──► 0-INBOX/            raw, as received; never cited
                   library API           text_id / edition_id / toc_id written back
 ```
 
-Put the received file in `0-INBOX/` first. The skills read it there and write the formatted file into `1-SOURCES/`:
+Put the received file in `0-INBOX/raw-data/` first, and never edit it there: it is your untouched original. The skills read it there and write the formatted file into `1-SOURCES/`:
 
 | Folder | What goes in it |
 |---|---|
@@ -116,7 +116,7 @@ Name files the way [`About Sources.md`](../../1-SOURCES/About%20Sources.md) says
 
 ### 2.2 Convert it: which skill for which file
 
-Run a skill by asking the agent (Claude Code) for it by name, e.g. `/raw-to-sources 0-INBOX/my-text.txt`. Each skill's `SKILL.md` in `4-SYSTEM/Skills/` says exactly what it does.
+You do not run these skills yourself: you ask the AI to, in plain words (see [How to ask the AI](#how-to-ask-the-ai) below). The tables tell you which skill to name. Each skill's `SKILL.md` in `4-SYSTEM/Skills/` says exactly what it does.
 
 **First, get it into Markdown:**
 
@@ -143,6 +143,181 @@ Run a skill by asking the agent (Claude Code) for it by name, e.g. `/raw-to-sour
 | Commentary → root text links | `transclusion`, **Mode 5** when the commentary will be uploaded |
 
 The skills produce the format below. Read it anyway: you check their output, and you fix by hand what they could not decide.
+
+#### How to ask the AI
+
+**Where to type.** Open the vault folder in Claude Code — the **Code** tab of the Claude desktop app, or type `claude` in a terminal opened in the vault folder — and type your request in the chat box. The AI reads the vault's rules (`CLAUDE.md`) by itself.
+
+**Two ways to call a skill.** Type `/` and the skill's name, then your request in plain words. Or just name it in a sentence. Both work the same:
+
+```text
+/frontmatter 1-SOURCES/Text/sgrol-ma-bstod-pa-bo.md
+```
+
+```text
+Please use the frontmatter skill on 1-SOURCES/Text/sgrol-ma-bstod-pa-bo.md
+```
+
+**What a good request says.** You do not need technical words. Tell the AI:
+
+1. **Which file** — its path in the vault, e.g. `1-SOURCES/Text/<file>.md` (in Obsidian: right-click the file → **Copy path** → the path from the vault folder).
+2. **What it is** — root text, commentary or translation; its language; for a commentary, which root text it explains.
+3. **What you already know** — title, author, where the text came from (a link). The AI must not guess these, so give them or let it leave them empty.
+4. **What you want back** — "show me first", "only chapter 1", "explain in simple words".
+
+**Example requests** — copy one and change the parts in `<…>`:
+
+*Not sure where to start:*
+
+```text
+I put a file in 0-INBOX/raw-data/<file name>. It is a Tibetan commentary on
+1-SOURCES/Text/<root text>.md. Which skills do I need, in what order?
+Don't change anything yet.
+```
+
+*Bring a raw text into the vault:*
+
+```text
+/raw-to-sources 0-INBOX/raw-data/<file name>
+This is a root text (type: root). Title: <title>. Author: <author>.
+Source: <link>. Keep every word as it is.
+```
+
+*Structure a Tibetan commentary, one step at a time:*
+
+```text
+/commentary-pipeline 1-SOURCES/Commentaries/<file>.md
+Stop after each step and tell me what you did, so I can check it.
+```
+
+*Link a commentary to its root text for upload:*
+
+```text
+/transclusion 1-SOURCES/Commentaries/<file>.md with root 1-SOURCES/Text/<root>.md.
+It will be uploaded, so use Mode 5. Show me the mapping before writing anything.
+```
+
+*Check a file:*
+
+```text
+Run the linter on 1-SOURCES/Text/<file>.md and explain each error in simple
+words. Don't fix anything yet.
+```
+
+…then, after reading the answer: `Fix errors 1 and 3. Leave error 2: the heading is correct.`
+
+*Upload (a test run first):*
+
+```text
+/root-text-upload 1-SOURCES/Text/<file>.md — dry run only.
+```
+
+**Tips**
+
+- **One file at a time**, and ask for a preview ("show me first", "only the first chapter") before a big change.
+- **When something is wrong, say exactly what**: not "the headings are wrong" but "`ཞལ་གྱི་ཡོན་ཏན།` should be under `སྐུའི་ཡོན་ཏན།`, one level deeper".
+- **Ask it to undo** if a change went badly: "Undo your last change to this file."
+- **Ask it to explain** anything you do not understand: "What does this error mean, in simple words?"
+- **Never let it guess** a title, author, date or link: "If you can't find it in the text, leave it empty."
+
+#### If your file has its own structure: describe it in the prompt
+
+Many files already show their structure, just not in Markdown: chapter lines that start with a word, numbered sections, an empty line before each new part. The AI cannot know your file's habits. **Describe them the way you would explain the file to a new colleague**, and it will use your structure instead of guessing one.
+
+Say four things:
+
+1. **Each kind of line, and how to recognise it** — the title, each heading level, verses, prose, anything to remove. Recognise by what the line starts with, its numbering, a symbol, bold, indentation, or what comes before or after it.
+2. **Which vault level each one becomes.** The title is always `#`, so **your first heading level is `##`**, the next `###`, and so on.
+3. **What must not change** — every word; and anything that looks like noise but is structure (e.g. "keep the numbers at the start of heading lines").
+4. **What to do when unsure** — "if you can't tell whether a line is a heading, list it for me instead of guessing."
+
+**Example.** A commentary saved as plain text, `0-INBOX/raw-data/tara-commentary.txt` (the `←` notes are only for this guide):
+
+```text
+སྒྲོལ་མ་ཉེར་གཅིག་ལ་བསྟོད་པའི་འགྲེལ་པ།                ← the title
+
+ལེའུ་དང་པོ། བསྟོད་པ་དངོས།                             ← a chapter
+༡ མདོར་བསྟན་པ།                                        ← the chapter's list of its sections
+༢ རྒྱས་པར་བཤད་པ།
+༣ མཇུག་བསྡུ་བ།
+
+༡ མདོར་བསྟན་པ།                                        ← a section really starts here
+༡.༡ ཕྱག་འཚལ་བའི་དོན།                                  ← a sub-section
+ཕྱག་འཚལ་ཞེས་པ་ནི་གུས་པས་འདུད་པའོ། །                     ← commentary text
+ཕྱག་འཚལ་སྒྲོལ་མ་མྱུར་མ་དཔའ་མོ། །                         ← a quoted verse, 4 lines
+སྤྱན་ནི་སྐད་ཅིག་གློག་དང་འདྲ་མ། །
+འཇིག་རྟེན་གསུམ་མགོན་ཆུ་སྐྱེས་ཞལ་གྱི། །
+གེ་སར་ཕྱེ་བ་ལས་ནི་བྱུང་མ། །
+```
+
+The prompt:
+
+```text
+Please bring 0-INBOX/raw-data/tara-commentary.txt into the vault with the
+raw-to-sources skill, then format it with format-commentary.
+
+It is a Tibetan commentary (type: commentary) on 1-SOURCES/Text/sgrol-ma-bstod-pa-bo.md.
+Source: https://webuddhist.com/. Leave the author empty.
+
+The file is plain text. Its structure:
+- Line 1 is the title of the work.
+- A line starting with "ལེའུ་" is a chapter.
+- A line starting with one Tibetan number and a space (༡ , ༢ …) is a section.
+- A line starting with two numbers joined by a dot (༡.༡ , ༢.༣ …) is a sub-section.
+- Right after each chapter line comes a list of that chapter's sections. That
+  list is text, not headings: put it on one line as one paragraph. A section
+  really starts where its line appears again, after an empty line.
+- A group of 4 lines that each end in "། །" is a quoted verse: keep the 4 lines
+  together as one block.
+- Every other line is commentary text, one paragraph per line.
+
+Make it the vault format:
+- title = #, chapter = ##, section = ###, sub-section = ####.
+- Give the title ^0. Heading IDs follow the numbering: chapter 1 = ^1-0,
+  section 1 = ^1-1-0, sub-section 1.1 = ^1-1-1-0.
+- Text blocks count on from the chapter: ^1-1, ^1-2, … in chapter 1.
+- A blank line before and after every heading and every block.
+- Keep every word, and keep the numbers at the start of heading lines.
+- If you can't tell what a line is, list it for me instead of guessing.
+
+Do chapter 1 first and show it to me before you do the rest.
+```
+
+What chapter 1 should come back as (this passes the linter):
+
+```markdown
+# སྒྲོལ་མ་ཉེར་གཅིག་ལ་བསྟོད་པའི་འགྲེལ་པ། ^0
+
+## ལེའུ་དང་པོ། བསྟོད་པ་དངོས། ^1-0
+
+༡ མདོར་བསྟན་པ། ༢ རྒྱས་པར་བཤད་པ། ༣ མཇུག་བསྡུ་བ། ^1-1
+
+### ༡ མདོར་བསྟན་པ། ^1-1-0
+
+#### ༡.༡ ཕྱག་འཚལ་བའི་དོན། ^1-1-1-0
+
+ཕྱག་འཚལ་ཞེས་པ་ནི་གུས་པས་འདུད་པའོ། ། ^1-2
+
+ཕྱག་འཚལ་སྒྲོལ་མ་མྱུར་མ་དཔའ་མོ། །
+སྤྱན་ནི་སྐད་ཅིག་གློག་དང་འདྲ་མ། །
+འཇིག་རྟེན་གསུམ་མགོན་ཆུ་སྐྱེས་ཞལ་གྱི། །
+གེ་སར་ཕྱེ་བ་ལས་ནི་བྱུང་མ། ། ^1-3
+```
+
+**Ways to describe a line** — pick whatever is true of your file:
+
+| Your file marks it with | Say it like this |
+|---|---|
+| A word at the start | "A line starting with `ལེའུ་` is a chapter." |
+| Numbering | "`1.` is a section, `1.1` a sub-section, `1.1.1` one level deeper." / "`(ཀ)`, `(ཁ)` … are sub-sections." |
+| A symbol | "A line starting with `*` is a section heading; remove the `*`." |
+| Bold, capitals, indentation | "Lines in bold are headings." / "A line indented by two spaces is a quoted verse." |
+| Its place | "The first line after an empty line is a section heading." |
+| Its ending | "A short line ending in `ནི།` on its own is a heading." |
+| A pattern of lines | "Four lines that each end in `། །` are one verse." |
+| Noise to drop | "Lines like `- 12 -` are page numbers: remove them." |
+
+**Paste two or three real lines for each kind**, as in the example: the AI learns your file from them much better than from a description alone. If your file has no visible structure at all, say so: for a Tibetan text, the `root-text-pipeline` and `commentary-pipeline` skills work out the structure themselves, and you check it after.
 
 ### 2.3 How the linter and parser read a file
 
