@@ -32,32 +32,32 @@ A root text is the primary source — the original Sanskrit, Tibetan, Pali, or o
 | Property       | Description                                                                                                                                                                                                                                                                                                           | Example                                  |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | `bdrc_work_id` | BDRC work ID for this text — passed through to the API as `bdrc`. Not used to look up titles.                                                                                                                                                                                                                       | `bdrc_work_id: WA19740`                  |
-| `alt_titles`   | Alternative titles in the **same language** as the file (unique variants only — do not repeat `title`). A single string, or a YAML list of strings. The linter keys each with the file's language code (`lang_tag`), no script suffix.                   | see format below                         |
+| `alt_titles`   | Alternative titles (unique variants only — do not repeat `title`). A YAML list, one item per title, each keyed by **its own** language code. | see format below                         |
 
 **`alt_titles` format**
 
-All variants must be in the file's language (e.g. Sanskrit file → Sanskrit alts; English translation → English alts). YAML stays plain strings; the linter adds the language key.
+One item per title, written `lang: "title"`. The key is the title's language, so titles in several languages sit in one list:
 
 ```yaml
-# single
-alt_titles: [short title]
-
-# multiple — each entry is a distinct variant
 alt_titles:
-  - [alternative title]
-  - [short title]
+  - bo: "ཕྱག་འཚལ་ཉེར་གཅིག"
+  - en: "Praise to the Twenty-One Tārās"
 ```
 
-Titles are keyed by the file's language code with no script suffix, and kept in whatever script they are written in (e.g. Sanskrit in Devanagari or IAST):
+Each key must be a language code the API knows (`bo`, `en`, `sa`, `zh`, …), with no script suffix; titles stay in whatever script they are written in (e.g. Sanskrit in Devanagari or IAST). The keys are passed through as written:
 
 ```json
-"language": "sa",
-"title": { "sa": "[title in the source language]" },
+"language": "bo",
+"title": { "bo": "སྒྲོལ་མ་ཉེར་གཅིག་ལ་བསྟོད་པ།" },
 "alt_titles": [
-  { "sa": "[alternative title]" },
-  { "sa": "[short title]" }
+  { "bo": "ཕྱག་འཚལ་ཉེར་གཅིག" },
+  { "en": "Praise to the Twenty-One Tārās" }
 ]
 ```
+
+A bare string (`- ཕྱག་འཚལ་ཉེར་གཅིག`) is still accepted and keyed with the file's own `lang_tag`, but write the keyed form so the language is never guessed.
+
+> **Caution — other-language alt titles.** The library makes every alt title a title of the text in its language, and titles are unique per language. An `en` alt title on a Tibetan text therefore claims that English title: a later English translation with the same title is refused (HTTP 422), and an uploaded alt title cannot be removed. Add one only when no translation will carry that title. `commentary-upload` refuses them on commentaries.
 
 **Exception — Pali (`lang_tag: pi`):** titles are still keyed `pi`, but must be written in Roman script (e.g. IAST: `Dhammasaṅgaṇī`). The linter errors on any non-Latin script (Sinhala, Thai, Burmese, Devanagari, …).
 
@@ -81,8 +81,8 @@ file_type: root-text
 category_id: JD5ULLPAV1cxg7RSb7L3q
 bdrc_work_id: WA19740
 alt_titles:
-  - [alternative title]
-  - [short title]
+  - sa: "[alternative title]"
+  - en: "[English title]"
 source: https://webuddhist.com/
 license: public
 edition_type: critical
@@ -108,7 +108,7 @@ A translation file renders the root text in another language. The root text file
 | `license` | Copyright status | `license: public` |
 | `translator` | Translator name(s), separated by semicolons. Attach a BDRC or OpenPecha ID using `[bdrc:ID]` or `[op:ID]`; names without an ID are skipped by the linter (with a warning), never looked up. For AI translations, use the model name with an OpenPecha ID. | `translator: Blo ldan shes rab [bdrc:P5678]; David Karma (bhikshu Karma Lodrö Choephel) [bdrc:P1234]; Claude Opus 4 [op:OP_ABC123]` |
 | `source` | URL of the source translation used | `source: https://webuddhist.com/` |
-| `alt_titles` | Alternative titles in the **same language** as this translation (`lang_tag`). A single string, or a YAML list of unique variants (do not repeat `title`). | `alt_titles: སྤྱོད་འཇུག` |
+| `alt_titles` | Alternative titles, one `lang: "title"` item per title, each keyed by its own language code (do not repeat `title`). Same format as root text. | `alt_titles: [bo: "སྤྱོད་འཇུག"]` |
 
 > **Note:** `translation_of` is auto-resolved by the linter. It follows the `root_text` path to the source file and reads its `text_id`.
 
@@ -143,7 +143,8 @@ file_type: translation
 root_text: 1-SOURCES/Text/sk-dev.md
 category_id: JD5ULLPAV1cxg7RSb7L3q
 bdrc_work_id: WA00KG0545
-alt_titles: སྤྱོད་འཇུག
+alt_titles:
+  - bo: "སྤྱོད་འཇུག"
 source: https://webuddhist.com/
 license: public
 covers_verses: 1-1–10-61
@@ -178,7 +179,7 @@ A commentary is a separate authored work that explains or expands on a root text
 | Property | Description |
 |----------|-------------|
 | `bdrc_work_id` | BDRC work ID for this commentary — passed through as `bdrc`; not used to look up titles |
-| `alt_titles` | Alternative titles in the **same language** as `lang_tag`. A single string, or a YAML list of unique variants (same format as root text). |
+| `alt_titles` | Alternative titles, one `lang: "title"` item per title, each keyed by its own language code (same format as root text). |
 
 ### Optional Properties
 
@@ -199,7 +200,8 @@ lang_tag: sa
 file_type: commentary
 root_text: 1-SOURCES/Text/sk-dev.md
 bdrc_work_id: WA...
-alt_titles: [short title]-pañjikā
+alt_titles:
+  - sa: "[short title]-pañjikā"
 source: https://...
 license: public
 edition_type: critical
