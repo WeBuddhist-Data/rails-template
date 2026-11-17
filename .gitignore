@@ -11,5 +11,9 @@
 .trash/
 .DS_Store
 
+# Python bytecode (created whenever a script runs)
+__pycache__/
+*.pyc
+
 # Claude Code worktrees (local only)
 .claude/worktrees/
