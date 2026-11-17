@@ -187,7 +187,7 @@ Adds block IDs so every verse, prose block and heading can be cited and transclu
 → [`add-block-ids/SKILL.md`](add-block-ids/SKILL.md)
 
 ### `transclusion`
-Inserts root-verse transclusion links into a commentary or a second version of the root text, placing each one where the verse becomes relevant.
+Inserts root-verse transclusion links into a commentary or a second version of the root text, placing each one where the verse becomes relevant: before a whole segment (never inside one), after a heading (never before one), full vault-relative path, one blank line on each side.
 → [`transclusion/SKILL.md`](transclusion/SKILL.md)
 
 ---

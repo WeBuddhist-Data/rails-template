@@ -2,8 +2,9 @@
 """STAGE 1 - Insert root-verse transclusions into a Tibetan commentary.
 
 For each root-text verse stanza, find its first FULL inline quotation in the
-commentary and insert  ![[<link-base>#^N-V]]  on the line immediately before it
-(short Obsidian link form). Full stanza is preferred over a partial/illustrative
+commentary and insert  ![[<link-base>#^N-V]]  on the line immediately before it.
+<link-base> must be the root's full vault-relative path with its .md extension
+(e.g. 1-SOURCES/Text/bo-root-text.md); anything else is refused. Full stanza is preferred over a partial/illustrative
 quotation; a verse quoted in passing (single line + closer) is matched
 only when no fuller quotation exists.
 
@@ -12,19 +13,19 @@ Also handles commentaries that quote the full stanza on a single bold line
 (**line1 line2 line3 line4**).
 
 This stage always places the transclusion right before the verse's own quoted
-text. Whether it then stays there or gets moved up to sit before the verse's
-own sa-bcad (ས་བཅད) heading is decided by Stage 2
-(02_remove_blank_before_transclusions.py, which now repositions rather than
-just trimming blanks - see its docstring). Blank-line spacing around the
-transclusion, wherever it ends up, is handled entirely by Stage 3
-(03_blank_before_sachad.py, which now normalizes spacing on both sides). This
-stage itself does not add or remove any blank lines.
+text, which may be INSIDE a segment (e.g. after "དང་པོ་ནི།" in the same
+segment). Its output is therefore not final: Stage 2
+(02_remove_blank_before_transclusions.py) always runs next and lifts every
+transclusion to the start of a segment - the verse's own sa-bcad segment when
+it has one, otherwise the segment holding the quotation. Blank-line spacing
+is handled entirely by Stage 3 (03_blank_before_sachad.py). This stage itself
+does not add or remove any blank lines.
 
 Usage:
   python3 01_transclude_verses.py \\
-      --root  1-SOURCES/Translations/<root>.md \\
-      --commentary 1-SOURCES/Commentaries/Raw/<comm>.md \\
-      --link-base "bo-blo-ldan-shes-rab" \\
+      --root  1-SOURCES/Text/<root>.md \\
+      --commentary 1-SOURCES/Commentaries/<comm>.md \\
+      --link-base "1-SOURCES/Text/<root>.md" \\
       [--chapter N | --chapter all] [--apply]
 
 Without --apply it prints a per-verse placement report (dry run). With --apply it
@@ -204,13 +205,21 @@ def main():
     ap.add_argument('--root', required=True)
     ap.add_argument('--commentary', required=True)
     ap.add_argument('--link-base', required=True,
-                    help='base of the transclusion link')
+                    help='full vault-relative path of the root, with .md '
+                         '(e.g. 1-SOURCES/Text/bo-root-text.md)')
     ap.add_argument('--chapter', default='all')
     ap.add_argument('--apply', action='store_true')
     a = ap.parse_args()
+    if not a.link_base.endswith('.md') or '/' not in a.link_base:
+        sys.exit("--link-base must be the full vault-relative path with .md "
+                 "(e.g. 1-SOURCES/Text/bo-root-text.md), got: %r" % a.link_base)
 
     verses = parse_root_verses(a.root, a.chapter)
-    comm_raw = open(a.commentary, encoding='utf-8').read().split('\n')
+    # keep the file's own line ending (text-mode I/O on Windows would turn
+    # LF into CRLF, and the next stage would then see a stray \r)
+    content = open(a.commentary, encoding='utf-8', newline='').read()
+    eol = '\r\n' if '\r\n' in content else '\n'
+    comm_raw = content.split(eol)
     comm_norm = [norm(x) for x in comm_raw]
     cand_idx = build_cand_index(comm_norm)
 
@@ -250,9 +259,9 @@ def main():
         out = comm_raw[:]
         for li, vid in sorted(insertions, reverse=True):
             out[li:li] = ["![[%s#^%s]]" % (a.link_base, vid)]
-        open(a.commentary, 'w', encoding='utf-8').write('\n'.join(out))
+        open(a.commentary, 'w', encoding='utf-8', newline='').write(eol.join(out))
         open(a.commentary, encoding='utf-8').read()  # validate decode
-        print("APPLIED %d insertions" % len(insertions))
+        print("APPLIED %d insertions - not final: run Stage 2 next" % len(insertions))
 
 if __name__ == '__main__':
     main()

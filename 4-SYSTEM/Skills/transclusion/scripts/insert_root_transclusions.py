@@ -126,6 +126,9 @@ def main():
     args = parser.parse_args()
     if args.source is None:
         args.source = default_source()
+    if not args.source.replace("\\", "/").endswith(".md") or "/" not in args.source.replace("\\", "/"):
+        sys.exit("--source must be the full vault-relative path with .md "
+                 f"(e.g. 1-SOURCES/Text/bo-root-text.md), got: {args.source!r}")
 
     source_lines = load_lines(args.source)
     target_lines = load_lines(args.target)
@@ -179,15 +182,21 @@ def main():
 
     insert_map = {start_idx: block_id for start_idx, block_id in to_insert}
     out_lines = []
+    blanks_before = 0
     for idx, line in enumerate(target_lines):
         if idx in insert_map:
             block_id = insert_map[idx]
+            # one blank line before the transclusion: a block that follows the
+            # previous one with no blank line between them gets one added
+            if out_lines and out_lines[-1].strip() != "":
+                out_lines.append(eol)
+                blanks_before += 1
             out_lines.append(f"![[{args.source}#^{block_id}]]{eol}")
             out_lines.append(eol)
         out_lines.append(line)
 
     added = len(out_lines) - len(target_lines)
-    expected = 2 * len(to_insert)
+    expected = 2 * len(to_insert) + blanks_before
     print(f"\nLines added: {added} (expected {expected})")
     if added != expected:
         print("ERROR: line delta mismatch, aborting write.")

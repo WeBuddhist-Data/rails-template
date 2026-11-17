@@ -18,16 +18,18 @@ description: >
 
 | Mode | Target | Placement rule | Scripted? |
 |---|---|---|---|
-| 1 — Commentary, quoted verses | Commentary that quotes each verse verbatim before commenting | Insert before the verse's first full inline quotation, then move up to the verse's own sa-bcad block where it has one | yes — 3 scripts |
+| 1 — Commentary, quoted verses | Commentary that quotes each verse verbatim before commenting | Find the verse's first full inline quotation, then place before the start of its segment — or of the verse's own sa-bcad segment(s) above it, where it has them | yes — 3 scripts |
 | 2 — Commentary, sa-bcad introduced | Commentary that announces each verse with a sa-bcad statement | Before the sa-bcad statement that introduces the verse | no — by hand |
 | 3 — Commentary, by section category | Commentary whose sections fall into overview / verse-by-verse / other | Classify each section first, then place by category | no — by hand |
 | 4 — Second root-text version | Another version or edition of the root text | Structurally matching position | Type 1 yes — 3 scripts |
 | 5 — Commentary, heading-scoped (alignment) | Commentary that explains each verse inside a sa-bcad sub-tree of headings, and will be parsed by `4-SYSTEM/Skills/commentary-upload/scripts/parser-commentary/` (the `commentary-upload` skill) | Right **after** every heading of the verse's sub-tree that has text of its own, plus before the first block on a new verse inside a section | mapping by hand, insertion scripted |
 
-**If the commentary is going to the API through `parser-commentary`, use Mode 5.** The
-parser aligns a commentary block to the root segments of the transclusion group above
-it, and *any heading ends that scope*. A transclusion placed before a heading (Modes
-1–4) therefore aligns nothing; the verse must be repeated under each heading.
+**A transclusion is never placed before a heading — always after it.** The parser
+(`parser-commentary`) aligns a commentary block to the root segments of the transclusion
+group above it, and *any heading ends that scope*, so a transclusion written before a
+heading aligns nothing. **If the commentary is going to the API through
+`parser-commentary`, use Mode 5**, which also repeats the transclusion under every
+heading of the verse's sub-tree.
 
 **Modes 1 and 2 reach the same place by different means.** Mode 2 is the manual
 statement of the rule (the transclusion belongs before the sa-bcad that announces
@@ -51,9 +53,10 @@ run `add-block-ids` on the root text first, or every link resolves to nothing.
 
 ---
 
-## House conventions — one link form, one spacing rule
+## House conventions — one link form, one placement rule, one spacing rule
 
-All four modes write the same thing; only the *placement decision* differs.
+All five modes write the same thing; only the *placement decision* differs. There
+are no variants and no exceptions.
 
 **Link form — full vault-relative path, always.**
 
@@ -62,48 +65,47 @@ All four modes write the same thing; only the *placement decision* differs.
 ```
 
 The full path from the vault root, including the `.md` extension. Never a bare
-note name, never a short wiki-link. A short link resolves only while the note
-name stays unique and stays put; the full path survives a rename of neither, but
-it fails loudly instead of silently pointing at the wrong file.
+note name, never a short wiki-link — not even when the file already uses short
+links. A short link resolves only while the note name stays unique and stays put;
+the full path survives a rename of neither, but it fails loudly instead of
+silently pointing at the wrong file. The scripts refuse a `--link-base` /
+`--source` that is not a full `.md` path.
+
+**Placement — before a whole segment, never inside one.** A segment is a run of
+consecutive non-blank lines, ended by a blank line or a heading; its block ID sits
+on its last line. A transclusion always goes immediately before the **first line
+of the segment** it transcludes into. When the verse's sa-bcad and its quotation
+share one segment, the transclusion goes before that segment, not between them:
+
+```
+…ཞེས་པ་ལྟར་རོ། །
+
+![[1-SOURCES/Text/<root-text>.md#^1-1]]
+
+དང་པོ་ནི།
+ཕྱག་འཚལ་སྒྲོལ་མ་མྱུར་མ་དཔའ་མོ། །
+```
+
+Never `དང་པོ་ནི།` / transclusion / verse: that cuts one segment in two, and the
+segment's block ID no longer covers the text above the cut. A transclusion also
+never goes before a heading — after it (see the note at the top).
 
 **Spacing — one blank line on each side.**
 
 ```
-<preceding line>
+<end of the previous segment>
 
 ![[1-SOURCES/Text/<root-text>.md#^1-1]]
 
-<the commentary text this introduces>
+<first line of the segment it transcludes into>
 ```
 
 Exactly one blank line immediately before and immediately after the
-transclusion, so it reads as its own Markdown block. A transclusion at the very
-start or end of a file takes no leading/trailing blank. Consecutive verses
-transcluded as a group sit on consecutive lines with **no** blank between them,
-and the group as a whole is wrapped by one blank line on each side.
-
-### The two registered variants
-
-These are the only permitted deviations, and each is a property of the *target
-file*, not a preference:
-
-1. **Short link form via `--link-base` (Mode 1).** Mode 1's scripts take the
-   link text as a `--link-base` argument and will emit whatever you give them.
-   Pass the **full vault-relative path** as `--link-base` to get the house form.
-   The short form is only correct when the file being edited already uses it
-   throughout and you are matching its existing precedent — say so in the run
-   report when you do.
-2. **No blank line before a sa-bcad (Mode 4, Type 2, `tibetan-master`).** When
-   the transclusion is placed immediately before an *inline sa-bcad phrase* (not
-   a heading), it binds to that phrase: blank line before the transclusion, none
-   between the transclusion and the sa-bcad line. This is deliberate — the
-   transclusion and its announcement are one unit. Everywhere else in that same
-   file, the house rule applies.
-
-Mode 2's Rule 5 ("preceded by whatever spacing already separated the prior
-content") is the house rule stated conservatively: it inserts the blank line
-*after* the transclusion and leaves an already-correct blank line before it
-alone. If there is no blank line before it, add one.
+transclusion, so it reads as its own Markdown block — add the one before when it
+is missing. A transclusion at the very start or end of a file takes no
+leading/trailing blank. Consecutive verses transcluded as a group sit on
+consecutive lines with **no** blank between them, and the group as a whole is
+wrapped by one blank line on each side.
 
 ---
 
@@ -138,7 +140,7 @@ Stages 2 and 3 assume the transclusions already exist (Stage 1 has run, or they 
 |---|---|---|
 | `root` | Full vault-relative path to the root text / translation to transclude from. Must use `verse_id_format: chapter-verse` block IDs (`^N-V`). | `1-SOURCES/Text/<root-text>.md` |
 | `commentary` | Full vault-relative path to the Tibetan commentary to modify in place. | `1-SOURCES/Commentaries/<commentary-id>_segmented.md` |
-| `link-base` | The base of the transclusion link, exactly as it should appear inside `![[ … #^N-V]]`. The skill uses the short Obsidian link form. | `1-SOURCES/Text/<root-text>.md` |
+| `link-base` | The base of the transclusion link, exactly as it appears inside `![[ … #^N-V]]`: the root's **full vault-relative path with `.md`** (house form — Stage 1 refuses anything else). | `1-SOURCES/Text/<root-text>.md` |
 | `chapter` | Optional. A single chapter label to scope the run, or `all` (default). Accepts a plain chapter number or a Roman-numeral front-matter label (see below). | `1`, `I`, `all` |
 
 **Chapter labels aren't always numeric.** Some root files in this vault give the pre-chapter-1 front matter (Sanskrit title line, Tibetan title line, opening homage) Roman-numeral block IDs — `^I-1`, `^I-2`, `^I-3` — instead of the generic `^0-N` convention. All three scripts recognize `^[IVXLCDM]+-N` alongside `^N-V`, and `--chapter` accepts either form (`--chapter I` scopes to the Roman-numeral front matter). Roman-numeral chapters sort before chapter 1 in reports.
@@ -150,8 +152,10 @@ Stages 2 and 3 assume the transclusions already exist (Stage 1 has run, or they 
 The commentary file is modified in place. The only changes are:
 
 1. inserted `![[link-base#^N-V]]` transclusion lines (Stage 1),
-2. the transclusion line moved up to sit right before the verse's own sa-bcad block, when it has one (Stage 2),
+2. each transclusion moved to the start of a segment — before the verse's own sa-bcad segment(s) when it has them, otherwise before the segment that holds the quotation (Stage 2),
 3. exactly one blank line inserted/normalized immediately before and immediately after each transclusion, wherever it now sits (Stage 3).
+
+No transclusion ends up inside a segment.
 
 No new files are created. No existing commentary text is changed.
 
@@ -169,8 +173,9 @@ For each root verse stanza, the script finds the **first full inline quotation**
 - **Single-line root segments (titles, the opening homage, colophon lines) get a second look.** The main matcher only searches for a match starting at the beginning of a commentary line, which is right for a block-quoted verse stanza but misses a short root line that a commentary paraphrases mid-sentence. For any root segment that is only one line long, a fallback pass additionally scans every commentary line for that text appearing *anywhere* inside it (exact equality or full containment). This is what lets a segment like the Sanskrit/Tibetan title lines or the opening homage (`^I-1`–`^I-3` where a vault registers the Roman-numeral front-matter zone — `4-SYSTEM/Guidelines/annotation-conventions.md` §7) get placed even though no commentary quotes them on their own dedicated line. It still won't force a match where the commentary only paraphrases the idea without the actual words — that stays `UNPLACED` for a human to place, same as always.
 - **Idempotent.** Verses already transcluded are skipped.
 - **No blank-line management.** Stage 1 no longer touches blank lines at all — that is entirely Stage 3's job now.
+- **Not final.** The transclusion sits right before the quoted stanza, which may be inside a segment (after a `དང་པོ་ནི།` in the same segment, say). Always run Stage 2 next: it lifts every transclusion to the start of a segment.
 
-Verses the script cannot place are listed under `UNPLACED`. These are usually **split quotations** (the commentator breaks the stanza across prose explanation) or large variants. Resolve each by hand: locate the first line of the verse's quotation and insert `![[link-base#^N-V]]` on the line immediately before it.
+Verses the script cannot place are listed under `UNPLACED`. These are usually **split quotations** (the commentator breaks the stanza across prose explanation) or large variants. Resolve each by hand: find the segment that holds the verse's first quotation and insert `![[link-base#^N-V]]` immediately before that segment's first line — never inside the segment.
 
 ```
 python3 4-SYSTEM/Skills/transclusion/scripts/01_transclude_verses.py \
@@ -184,10 +189,12 @@ python3 4-SYSTEM/Skills/transclusion/scripts/01_transclude_verses.py ... --chapt
 
 #### Stage 2 — Reposition before the verse's own sa-bcad (`4-SYSTEM/Skills/transclusion/scripts/02_remove_blank_before_transclusions.py`)
 
-Decides, per verse, whether the transclusion belongs right before that verse's own **sa-bcad (ས་བཅད) block** or right before the **verse** itself, and moves it there:
+Moves every transclusion to the **start of a segment**, and decides which one: the verse's own **sa-bcad (ས་བཅད) segment(s)**, or the segment that holds the **verse** itself. It works segment by segment, never line by line, so it can never land inside a segment:
 
-- **If the verse has its own sa-bcad** — the line immediately above the transclusion is structural (an ordinal, a heading, an enumeration opener/member — see classification below) — the transclusion is moved up to sit immediately before the **first line of that sa-bcad block** (walking up through any enumeration so the block starts at a genuine opener/heading/ordinal, exactly as it used to only for blank-line placement).
-- **If the verse has no sa-bcad** — the line above is ordinary prose, a connector, a commentary conclusion, or a root-verse fragment — the transclusion is **left exactly where Stage 1 put it**, right before the verse.
+- **Its own segment first.** The transclusion goes at least to the first line of the segment it sits in. If Stage 1 left it after a `དང་པོ་ནི།` in the same segment, it moves above that line.
+- **If the verse has its own sa-bcad** — the segment directly above is structural (every line in it is an ordinal, a heading phrase, an enumeration opener/member — see classification below) — it walks up through the structural segments and moves to the first line of the **topmost one that holds an opener** (leading member-only segments are trimmed).
+- **If the verse has no sa-bcad** — the segment above is ordinary prose, a connector, a commentary conclusion, or a root-verse fragment, or there is a heading or another transclusion — it stays at the start of its own segment.
+- **Long segments are left alone.** In a file that is not segmented (few or no blank lines) the "segment" can run for hundreds of lines. When the start of the transclusion's segment is more than `--max-segment-lines` (default 12) above it, the transclusion is not moved and is reported as `LONG-SEGMENT`: segment the commentary first, or place it by hand.
 
 Only the `![[...]]` line itself moves. No blank lines are touched here (that's Stage 3), and no commentary text is added, removed, reordered, or rephrased.
 
@@ -208,7 +215,9 @@ Normalizes spacing to the house rule — exactly **one blank line** immediately 
 <following line>
 ```
 
-Multiple existing blank lines touching a transclusion are collapsed to one; a missing blank is inserted. A transclusion at the very start or end of the file gets no leading/trailing blank (nothing to separate it from). Nothing else in the file is touched.
+Multiple existing blank lines touching a transclusion are collapsed to one; a missing blank is inserted. Transclusions on consecutive lines are one group: the blank lines go around the group, never inside it. A transclusion at the very start or end of the file gets no leading/trailing blank (nothing to separate it from). Nothing else in the file is touched.
+
+**Stage 3 never splits a segment.** A transclusion with text directly above *and* directly below is still inside a segment (Stage 2 not run yet, or a `LONG-SEGMENT`). Blank lines there would cut the segment in two, so it is left untouched and reported as `MID-SEGMENT`.
 
 ```
 python3 4-SYSTEM/Skills/transclusion/scripts/03_blank_before_sachad.py --commentary "<comm>.md"          # dry run
@@ -219,14 +228,14 @@ python3 4-SYSTEM/Skills/transclusion/scripts/03_blank_before_sachad.py --comment
 
 ### Sa-bcad classification (used by Stage 2 to decide placement)
 
-A line counts as **structural** (part of a sa-bcad block) when it is one of:
+Each line is read **without its trailing block ID** — every segment of a segmented commentary ends in one, and `…ནི། ^1-3` must still read as ending in `ནི།`. A **segment is structural** when every one of its lines is structural. A line counts as **structural** (part of a sa-bcad block) when it is one of:
 
 - an **ordinal-led** line: starts with `དང་པོ`, `གཉིས་པ`, `གསུམ་པ`, … `བཅུ་པ` — checked first, and normally enough regardless of what else the same block contains, **but only when heading-anchored if it also contains a ཞེས/ཅེས conclusion** (see the false-positive note below — this gate did not exist in earlier runs of this skill and its absence caused real misplacements);
 - a **heading**: ends in `ནི།` / `ནི། །` (a "this is X" announcement), short (≤ 60 collapsed syllables);
 - an **enumeration opener**: ends in `ལ།`, `ལ་ཡང་།`, `ལས།`, `ཏེ།`, `སྟེ།`, short;
 - an **enumeration member / closer**: ends in `དང་།` / `དང༌།`, or a closing member `…པའོ། །` / `…བའོ། །` / `…ནོ། །` / `…ལོ། །`, or a count word (`…གསུམ།`, `…གཉིས།`, …), short.
 
-A line is **not** structural (and stops the upward walk) when it is:
+A line is **not** structural (and a segment holding it stops the upward walk) when it is:
 
 - ordinary commentary prose (long sentences);
 - a connector: `དེའི་རྗེས་སུ།`, `དེའི་འཐད་པར།`, `དེའི་འཐད་པ་ནི།`;
@@ -244,65 +253,68 @@ The one structural signal that reliably tells a genuine sa-bcad resumption apart
 
 This is a heuristic, not certainty, and it is deliberately conservative: a handful of genuinely fresh transitional arguments (an ordinal opening a new causal point, with no repeated heading text, that happens to also contain ཞེས/ཅེས somewhere in its own explanation) will now also fall back to "stays before verse" — confirmed example: ^6-25 in this same file, judged correct by manual reading but with no heading anchor for the automation to key off. **A missed sa-bcad placement (verse quoted a few lines later than ideal) is a much smaller error than a wrong one (root verse displaced across a neighboring verse's own commentary material)**, so this trade-off is intentional. This is exactly what the Stage 2 `--report` step is for — see the checklist below: skim the "stays before verse" list for chapters with heavy enumeration or debate prose (lists of faults/virtues, opponent-refutation dialogues) and hand-place any genuine sa-bcad the heuristic was too conservative about.
 
-**Block start.** Walk up the contiguous run of structural lines above the transclusion; trim any leading member-only lines so the block begins at a genuine opener/heading/ordinal. The transclusion moves to right before that first line. If the run contains no opener/heading/ordinal (e.g. a lone `…པའོ། །` prose conclusion), it is not a real sa-bcad block → the transclusion is not moved.
+**Block start.** Walk up the contiguous run of structural segments above the transclusion's own segment; trim any leading member-only segments so the block begins at a segment holding a genuine opener/heading/ordinal. The transclusion moves to right before the **first line of that segment** — even when the opener is a later line of it. If the run holds no opener/heading/ordinal (e.g. a lone `…པའོ། །` prose conclusion), it is not a real sa-bcad block → the transclusion goes to the start of its own segment.
 
-**"Immediately above" skips blank lines, not just literal adjacency.** Segmented commentaries typically put every clause on its own paragraph, separated by a blank line - so the walk looks at the nearest *non-blank* line above the transclusion (and the nearest non-blank line above that, and so on), not literally `line[i-1]`. Reading it as strict line-adjacency would see a blank line everywhere and never find a sa-bcad at all. A markdown heading line (`##`–`########`, ending in its own block ID like `^1-2-1-0`) is never itself treated as structural — it always reads as `none` and stops the walk - only a plain-prose sa-bcad *announcement* sentence counts, even when it sits right below a heading that restates the same point.
+**The walk goes segment by segment.** Segmented commentaries typically put every clause in its own segment, separated by a blank line, so the walk looks at the nearest segment above (blank lines skipped), then the one above that, and so on. A markdown heading line (`##`–`########`, ending in its own block ID like `^1-2-1-0`) is never itself treated as structural — it stops the walk, so a transclusion never moves above a heading. Another transclusion stops it too. Only a plain-prose sa-bcad *announcement* sentence counts, even when it sits right below a heading that restates the same point.
 
 ---
 
 ### Worked example (verse ^1-4)
 
-After Stage 1 (transclusion right before the verse, blank lines not yet normalized):
+After Stage 1 (transclusion right before the quoted verse — inside the segment that opens with `དང་པོ་ནི།`, so not final yet):
 
 ```
-… ཡོད་པར་འགྱུར་རོ་ཞེས་པའོ། །              ← prose conclusion (stops the walk)
-གཉིས་པ་བརྩམ་བྱ་…དངོས་བཤད་པ་ལ།            ← block FIRST line (ordinal + ལ། opener)
-…ལེའུ་གསུམ།  /  …ལ་ཡང་།  /  …དང༌།          ← enumeration members
-…
-ལུས་རྟེན་…ཚུལ་དང་།
-སེམས་རྟེན་…ཚུལ་ལོ། །
-དང་པོ་ནི།                                  ← the immediate sa-bcad
+… ཡོད་པར་འགྱུར་རོ་ཞེས་པའོ། ། ^1-12         ← prose conclusion segment (stops the walk)
+
+གཉིས་པ་བརྩམ་བྱ་…དངོས་བཤད་པ་ལ། ^1-13       ← structural segment with an opener (ordinal + ལ།)
+
+ལུས་རྟེན་…ཚུལ་དང་། ^1-14                   ← member-only segments
+སེམས་རྟེན་…ཚུལ་ལོ། ། ^1-15
+
+དང་པོ་ནི།                                  ← the verse's own segment: sa-bcad …
 ![[1-SOURCES/Text/<root-text>.md#^1-4]]
+<verse lines> ^1-16                          ← … and the quotation
 ```
 
-After Stage 2 — the transclusion **moves up** to right before the **first line of the sa-bcad block** (not just before the immediate `དང་པོ་ནི།`):
+After Stage 2 — the transclusion leaves the inside of its segment and **moves up** to right before the **first line of the topmost structural segment that holds an opener**:
 
 ```
-… ཡོད་པར་འགྱུར་རོ་ཞེས་པའོ། །
+… ཡོད་པར་འགྱུར་རོ་ཞེས་པའོ། ། ^1-12
+
 ![[1-SOURCES/Text/<root-text>.md#^1-4]]
-གཉིས་པ་བརྩམ་བྱ་…དངོས་བཤད་པ་ལ།
-… (enumeration unchanged) …
+གཉིས་པ་བརྩམ་བྱ་…དངོས་བཤད་པ་ལ། ^1-13
+
+… (members unchanged) …
+
 དང་པོ་ནི།
-<verse text follows>
+<verse lines> ^1-16
 ```
 
-After Stage 3 — one blank line is added on each side of the transclusion:
+After Stage 3 — one blank line on each side of the transclusion:
 
 ```
-… ཡོད་པར་འགྱུར་རོ་ཞེས་པའོ། །
+… ཡོད་པར་འགྱུར་རོ་ཞེས་པའོ། ། ^1-12
 
 ![[1-SOURCES/Text/<root-text>.md#^1-4]]
 
-གཉིས་པ་བརྩམ་བྱ་…དངོས་བཤད་པ་ལ།
-… (enumeration unchanged) …
-དང་པོ་ནི།
-<verse text follows>
+གཉིས་པ་བརྩམ་བྱ་…དངོས་བཤད་པ་ལ། ^1-13
 ```
 
-Contrast: where the line above the transclusion is a connector (`དེའི་འཐད་པར།`) or commentary prose (`…ཞེས་གསུངས།`), Stage 2 leaves the transclusion right before the verse, and Stage 3 still wraps it with one blank line on each side.
+Contrast: where the segment above the verse's own segment is a connector (`དེའི་འཐད་པར།`) or commentary prose (`…ཞེས་གསུངས།`), Stage 2 moves the transclusion only to the start of the verse's own segment — before `དང་པོ་ནི།`, never between it and the verse — and Stage 3 wraps it with one blank line on each side.
 
 ---
 
 ### Rules
 
 1. **Read-only except for navigation links, their position, and their spacing.** `1-SOURCES/` files may receive block IDs, frontmatter, internal navigation links (transclusions qualify), and `[Ed:…]` notes only. This skill inserts `![[…]]` lines, moves them relative to sa-bcad structure, and manages the blank lines immediately around them — nothing else.
-2. **Link form comes from `--link-base`.** The scripts emit `![[<link-base>#^N-V]]` verbatim. Pass the **full vault-relative path** (with `.md`) as `--link-base` — that is the house form (see **House conventions** above). Pass a short note name only when the target commentary already uses short links throughout, and say so in the run report.
+2. **Link form comes from `--link-base`.** The scripts emit `![[<link-base>#^N-V]]` verbatim. `--link-base` must be the **full vault-relative path** (with `.md`) — the house form (see **House conventions** above). Stage 1 refuses anything else, including a short note name, even in a file that already uses short links.
 3. **Never duplicate a transclusion.** Stage 1 skips any verse whose `^N-V` is already transcluded.
 4. **Never modify existing commentary text.** Every stage only inserts, moves, or removes `![[…]]` lines and the blank lines immediately around them.
-5. **Always dry-run first.** Run each stage without `--apply` (`--report` for Stage 2, plain dry-run for Stages 1 and 3), read the report, then apply. For Stage 1, hand-resolve every `UNPLACED` verse before moving on. A single-line root segment (title lines, the opening homage, a colophon line) that stays `UNPLACED` after the fallback pass usually means the commentary only paraphrases it rather than using its actual wording - place it by hand right before the passage that discusses it (prefer the line that most directly restates or quotes it; if that passage opens with its own heading, placing the transclusion right before the heading is also reasonable for a front-matter segment with no verse-style prose exposition of its own).
-6. **Run the stages in order** (1 → 2 → 3) for a fresh commentary. Stages 2 and 3 may be run independently on a commentary that already has transclusions.
-7. **Lenient read, clean write.** The scripts read the commentary leniently (so a stray truncated final byte does not abort a run) and re-validate the UTF-8 decode after writing. If a prior tool clipped the final colophon byte, repair the last line from a known-good backup before applying.
-8. **Idempotent end-to-end.** Running Stages 2 and 3 again on an already-processed commentary makes no further changes.
+5. **Never split a segment.** After Stage 2 every transclusion sits at the start of a segment; Stage 3 refuses to put blank lines around one that is still inside a segment (`MID-SEGMENT`). Resolve every `LONG-SEGMENT` (Stage 2) and `MID-SEGMENT` (Stage 3) by hand, or segment the commentary first.
+6. **Always dry-run first.** Run each stage without `--apply` (`--report` for Stage 2, plain dry-run for Stages 1 and 3), read the report, then apply. For Stage 1, hand-resolve every `UNPLACED` verse before moving on. A single-line root segment (title lines, the opening homage, a colophon line) that stays `UNPLACED` after the fallback pass usually means the commentary only paraphrases it rather than using its actual wording - place it by hand right before the segment that discusses it (prefer the segment that most directly restates or quotes it; if that passage opens with its own heading, place the transclusion right after the heading, never before it).
+7. **Run the stages in order** (1 → 2 → 3) for a fresh commentary. Stages 2 and 3 may be run independently on a commentary that already has transclusions — but Stage 2 only on one placed by this mode. **Never run Stage 2 on a commentary placed by Mode 5**: it would lift anchors that Mode 5 put after an announcement (`ད་ནི་…བརྗོད་པར་བྱ་སྟེ།`) on purpose. Stage 3 is safe on any commentary.
+8. **Lenient read, clean write.** The scripts read the commentary leniently (so a stray truncated final byte does not abort a run) and re-validate the UTF-8 decode after writing. If a prior tool clipped the final colophon byte, repair the last line from a known-good backup before applying.
+9. **Idempotent end-to-end.** Running Stages 2 and 3 again on an already-processed commentary makes no further changes.
 
 ---
 
@@ -310,8 +322,8 @@ Contrast: where the line above the transclusion is a connector (`དེའི་
 
 1. Confirm `root` is a `1-SOURCES/` root/translation file with `^chapter-verse` block IDs, and `commentary` is a `1-SOURCES/` Tibetan commentary.
 2. **Stage 1** — dry-run per chapter; review placements and `UNPLACED`; apply; hand-place any split/variant verses. After all chapters, confirm: transclusion count = unique verse-id count = root verse count.
-3. **Stage 2** — `--report`; spot-check the sa-bcad decisions (especially multi-line enumeration blocks) — confirm each "moves before sa-bcad" verse genuinely has its own sa-bcad, and each "stays before verse" verse genuinely doesn't. Pay particular attention to chapters built around a pre-announced numbered list of faults/virtues or an opponent-refutation dialogue — read a few "moves before sa-bcad" entries there in full context to make sure the ordinal-led block being moved to actually introduces the verse now sitting after it, and not a word or sub-point of the verse just quoted above it (see the false-positive note above); apply.
-4. **Stage 3** — dry-run; apply. Confirm every transclusion now has exactly one blank line immediately before and after it, and nothing else changed.
+3. **Stage 2** — `--report`; resolve every `LONG-SEGMENT` (segment the file, or place by hand at the start of the segment); spot-check the sa-bcad decisions (especially multi-line enumeration blocks) — confirm each "moves before sa-bcad" verse genuinely has its own sa-bcad, and each "moves to its segment start" verse genuinely doesn't. Pay particular attention to chapters built around a pre-announced numbered list of faults/virtues or an opponent-refutation dialogue — read a few "moves before sa-bcad" entries there in full context to make sure the ordinal-led block being moved to actually introduces the verse now sitting after it, and not a word or sub-point of the verse just quoted above it (see the false-positive note above); apply.
+4. **Stage 3** — dry-run; it must report no `MID-SEGMENT` transclusion (fix any by hand first); apply. Confirm every transclusion now has exactly one blank line immediately before and after it, and nothing else changed.
 5. **Verify integrity** — compare non-blank lines before/after each apply; they must be byte-identical except for the transclusion lines themselves (present, possibly moved) and the blank lines directly touching them. Confirm the file still decodes as UTF-8 and ends correctly.
 
 ---
@@ -320,9 +332,9 @@ Contrast: where the line above the transclusion is a connector (`དེའི་
 
 - [ ] Root confirmed to have `^N-V` (or `^[Roman numeral]-V` front-matter) block IDs; commentary confirmed in `1-SOURCES/`
 - [ ] Stage 1: every verse placed (by the matcher or, for a single-line title/homage/colophon segment, by hand) or explicitly left `UNPLACED` with a reason; transclusions = unique ids = root verse count; no duplicates
-- [ ] Stage 2: every transclusion sits right before its verse's own sa-bcad block when one exists, and right before the verse otherwise; no sa-bcad block wrongly identified or missed
-- [ ] Stage 3: exactly one blank line immediately before and after every transclusion; no blank lines added or removed anywhere else
-- [ ] Every inserted transclusion uses the agreed link form
+- [ ] Stage 2: every transclusion sits at the start of a segment — before its verse's own sa-bcad segment(s) when they exist, before the segment holding the verse otherwise; no `LONG-SEGMENT` left; no sa-bcad block wrongly identified or missed
+- [ ] Stage 3: no `MID-SEGMENT` reported; exactly one blank line immediately before and after every transclusion (or group); no blank lines added or removed anywhere else
+- [ ] Every inserted transclusion uses the full vault-relative path with `.md`
 - [ ] No commentary text deleted, reordered, or rephrased (non-blank, non-transclusion lines byte-identical)
 - [ ] File decodes as UTF-8 and ends with the intact colophon
 
@@ -345,7 +357,7 @@ If either file is missing required block IDs, stop and report which IDs are miss
 
 ### Output
 
-The same `commentary-file`, modified in place: a transclusion line plus one blank line inserted directly above the sa-bcad paragraph (or paragraphs) leading into every matched verse-quotation block, or directly above the quotation itself when no sa-bcad paragraph precedes it. No existing line is deleted, reordered, or reworded. Total line count increases by exactly two for each verse transcluded.
+The same `commentary-file`, modified in place: a transclusion line, with one blank line on each side, inserted directly above the sa-bcad paragraph (or paragraphs) leading into every matched verse quotation, or directly above the paragraph holding the quotation when no sa-bcad paragraph precedes it. A paragraph is a segment: the transclusion always goes before its first line, never inside it. No existing line is deleted, reordered, or reworded.
 
 ---
 
@@ -416,8 +428,8 @@ The transclusion also always lands after any markdown heading(s) (##, ###, …) 
 1. **Full vault-relative paths only.** Every transclusion link uses the full path from the vault root with the `.md` extension, e.g. `![[1-SOURCES/Text/bo-སྒྲོལ་མ་ཉེར་གཅིག་ལ་བསྟོད་པ།.md#^1-1]]` — never a bare note name or short wiki-link, per **House conventions** above.
 2. **Match by content, tolerant of orthographic variants.** A commentary's quotation rarely matches the root byte-for-byte (tsheg/vowel-length spelling, an alternate reading in the commentary's source witness). Match on substantive overlap — the same padas in the same order, allowing for known variant classes (e.g. ཏུཏྟཱ་ར/ཏུ་ཏྟྭ་ར, ཧཱུཾ/ཧཱུྃ, a synonym substitution) — not exact string equality. If a passage cannot be confidently matched to one specific verse (a paraphrase, or overlap ambiguous between two adjacent verses), stop and report it rather than guessing.
 3. **One embed per verse, at its first occurrence.** When a commentary explains a verse line-by-line and quotes it in several separate, non-adjacent places (a pada at a time), insert the transclusion of the *complete* verse only above the sa-bcad leading into the *first* of those quotation points. Do not re-embed the same full verse at each subsequent partial quotation — that clutters the file with repeated, partially-spoiling embeds.
-4. **Placement is immediately above the sa-bcad, not immediately above the quotation.** Starting from the quotation paragraph, walk backward through any immediately preceding paragraph(s) that are themselves sa-bcad / outline-announcement prose — recognizable because the paragraph, stripped of its trailing block-ID, ends in ནི། (e.g. "དང་པོ་ནི།", "...བསྟོད་པར་མཛད་པ་ནི།"). Keep walking back through a run of consecutive ནི།-ending paragraphs, but stop as soon as you hit a paragraph that does not end in ནི། (ordinary continuing commentary, e.g. ending in དང་།, ཅིང་།, ལའོ། ), a markdown heading, or another transclusion. Insert directly before the topmost paragraph in that ནི།-ending run. If no ནི།-ending paragraph precedes the quotation at all, insert directly above the quotation itself, exactly as before.
-5. **Exactly one blank line between the transclusion and the paragraph now immediately following it** (the topmost sa-bcad paragraph, if the verse has one; otherwise the quotation itself), and the transclusion is preceded by whatever spacing already separated the prior content from that paragraph (do not add a second blank line if one already exists there).
+4. **Placement is immediately above the sa-bcad, not immediately above the quotation — and always at the start of a paragraph.** When the sa-bcad and the quotation share one paragraph (`དང་པོ་ནི།` on one line, the verse on the next, no blank line between), the transclusion goes before that paragraph's first line — never between the sa-bcad and the verse. Otherwise, starting from the quotation paragraph, walk backward through any immediately preceding paragraph(s) that are themselves sa-bcad / outline-announcement prose — recognizable because the paragraph, stripped of its trailing block-ID, ends in ནི། (e.g. "དང་པོ་ནི།", "...བསྟོད་པར་མཛད་པ་ནི།"). Keep walking back through a run of consecutive ནི།-ending paragraphs, but stop as soon as you hit a paragraph that does not end in ནི། (ordinary continuing commentary, e.g. ending in དང་།, ཅིང་།, ལའོ། ), a markdown heading, or another transclusion. Insert directly before the topmost paragraph in that ནི།-ending run. If no ནི།-ending paragraph precedes the quotation at all, insert directly above the paragraph holding the quotation.
+5. **Exactly one blank line on each side of the transclusion** — between it and the paragraph now immediately following it (the topmost sa-bcad paragraph, if the verse has one; otherwise the quotation's paragraph), and between it and whatever precedes it. Add the blank line before when it is missing; never leave two.
 6. **Never duplicate an existing transclusion.** Before inserting, check whether a transclusion of that same root block ID already sits at the correct insertion point identified by Rule 4. If so, skip it and note the skip in the report.
 7. **Never modify existing content.** No line of the commentary's own quotation, its sa-bcad wording, its block ID, its explanatory prose, or any heading is deleted, reordered, or reworded. Insertions only — the sa-bcad and quotation keep their exact wording and relative order to each other, they just both move below the newly inserted embed.
 8. **Preserve existing block IDs as-is.** Do not renumber, move, or re-anchor any `^...` id already present in the commentary.
@@ -429,12 +441,12 @@ The transclusion also always lands after any markdown heading(s) (##, ###, …) 
 
 1. Read `root-text-file`'s frontmatter. Confirm `verse_id_format: chapter-verse` (or equivalent) is present. Extract every block ID and its verse text into a map `{block_id → verse_text}`, including any appendix-style section (e.g. `^a-1`...`^a-N` for a benefits/phan-yon block, `^I-1`...`^I-N` for a front-matter homage) in addition to the main `^chapter-verse` sequence.
 2. Read `commentary-file` in full, and split it into paragraphs (blocks of lines set off by blank lines), keeping track of each paragraph's line range and whether it is a markdown heading (starts with `#`), a transclusion (starts with `![[`), or plain prose/verse text.
-3. Scan the paragraphs for every one that quotes root-verse wording: it opens with a verse's characteristic opening words and consists of one to four pada lines ending in `།` / `། །` punctuation. For each such paragraph, match it against the map from step 1 using Rule 2 (content match, variant-tolerant). Record the paragraph's index and the matched `block_id`.
+3. Scan the paragraphs for every one that quotes root-verse wording: it holds a run of one to four pada lines ending in `།` / `། །` punctuation that opens with a verse's characteristic opening words — usually the whole paragraph, sometimes after a sa-bcad line in the same paragraph. For each such paragraph, match it against the map from step 1 using Rule 2 (content match, variant-tolerant). Record the paragraph's index and the matched `block_id`.
 4. Group matches by `block_id`. Where a `block_id` has more than one matched paragraph (a split, line-by-line quotation), keep only the earliest (first in document order) as the insertion anchor for that verse; discard the rest per Rule 3.
-5. For each insertion anchor, apply Rule 4: walk backward from the quotation paragraph through consecutive non-heading, non-transclusion paragraphs whose text (stripped of its trailing block-ID) ends in ནི།. The insertion point is immediately before the topmost paragraph reached this way, or immediately above the quotation itself if the paragraph directly before it does not end in ནི། (or is a heading, or is the start of the file).
+5. For each insertion anchor, apply Rule 4: walk backward from the quotation paragraph through consecutive non-heading, non-transclusion paragraphs whose text (stripped of its trailing block-ID) ends in ནི།. The insertion point is immediately before the first line of the topmost paragraph reached this way, or immediately before the first line of the quotation's own paragraph if the paragraph directly before it does not end in ནི། (or is a heading, or is the start of the file). It is never a line inside a paragraph.
 6. At each insertion point, check Rule 6: does a transclusion of that exact `block_id` already sit there? If yes, drop it from the insertion list and record the skip.
 7. Sort the remaining insertion points in descending order of line position (bottom of file first) so earlier insertions do not shift the line numbers of later ones.
-8. For each insertion point, in that order, insert two lines: `![[<root-text-file, full vault-relative path>#^<block_id>]]`, then a blank line. Everything that was already at and after the insertion point (the sa-bcad run, then the quotation, then the rest of the file) shifts down unchanged.
+8. For each insertion point, in that order, insert `![[<root-text-file, full vault-relative path>#^<block_id>]]` followed by a blank line — and, when the line above the insertion point is not blank (and the point is not the top of the file), a blank line before it as well. Everything that was already at and after the insertion point (the sa-bcad run, then the quotation, then the rest of the file) shifts down unchanged.
 9. Write the modified `commentary-file`.
 10. Report every insertion made (per Rule 9) and every skip (split-continuation or duplicate).
 
@@ -450,7 +462,8 @@ The transclusion also always lands after any markdown heading(s) (##, ###, …) 
 - [ ] No verse re-embedded more than once when its quotation is split across multiple points in the commentary — only the first occurrence carries the transclusion
 - [ ] No existing transclusion duplicated at any insertion point
 - [ ] No existing line deleted, reordered, or reworded; only insertions made
-- [ ] Exactly one blank line separates each transclusion from the paragraph beneath it
+- [ ] Every transclusion sits before the first line of a paragraph — none between a sa-bcad and the verse in the same paragraph
+- [ ] Exactly one blank line on each side of every transclusion
 - [ ] Any passage that could not be confidently matched to a single verse was reported to the human rather than guessed
 - [ ] Post-write report produced listing every verse inserted and every skip, with reasons
 
@@ -462,7 +475,7 @@ Classify every section as verse-group overview, verse-by-verse exposition, or ne
 
 This is the canonical, general-purpose implementation of the "Format — with transclusions" layout described in the vault's own sources guideline (`1-SOURCES/About Sources.md`). It anchors a commentary to its root text by inserting `![[...]]` transclusion links, but only after classifying *why* the transclusion belongs where it belongs — the three-way distinction that guideline draws between a section that introduces a group of verses, a section that comments verse by verse, and an introductory section with no verse reference at all. Getting this classification wrong is the main failure mode this skill exists to prevent: transcluding all verses at the top of a verse-by-verse section (over-transclusion) or omitting the group transclusion at the opening of an overview section (under-transclusion) both misrepresent the commentary's own structure.
 
-This skill is deliberately structure-first and script-agnostic — it does not assume Tibetan sa-bcad (ས་བཅད) phrasing or any other language's structural idiom. For Tibetan master's commentaries where transclusions must land on the exact line before a sa-bcad phrase (with its own blank-line conventions), use Mode 4 Type 2 (`commentary-type: tibetan-master`) or the scripted pipeline in Mode 1 instead — both give finer control over sa-bcad-level placement than this skill's section-level classification. Use this skill when the classification itself, not the fine placement within a Tibetan structural block, is the open question — including for non-Tibetan commentaries where no equivalent skill exists.
+This skill is deliberately structure-first and script-agnostic — it does not assume Tibetan sa-bcad (ས་བཅད) phrasing or any other language's structural idiom. For Tibetan master's commentaries where transclusions must land on the segment that holds a sa-bcad phrase, use Mode 4 Type 2 (`commentary-type: tibetan-master`) or the scripted pipeline in Mode 1 instead — both give finer control over sa-bcad-level placement than this skill's section-level classification. Use this skill when the classification itself, not the fine placement within a Tibetan structural block, is the open question — including for non-Tibetan commentaries where no equivalent skill exists.
 
 ---
 
@@ -538,7 +551,7 @@ Obsidian does not support block-ID range transclusion (`#^1-1:#^1-3`). Category 
 
 1. **Classify before writing.** Every `###`/`####` section in `section-scope` is assigned exactly one of three categories (A: group, B: verse-by-verse, C: introductory/no-verse) before any transclusion is inserted for that section. A section is never partially classified.
 2. **Category A — all-at-once, at the opening.** If a section introduces a defined group of verses, every verse in that group is transcluded in sequence, immediately after the heading and before any commentary prose — never interleaved with the group's commentary.
-3. **Category B — one-per-verse, immediately before its own commentary.** If a section addresses verses one at a time, each verse gets exactly one transclusion, placed on the line immediately before the first line of commentary that concerns it — not at the top of the section.
+3. **Category B — one-per-verse, immediately before its own commentary.** If a section addresses verses one at a time, each verse gets exactly one transclusion, placed immediately before the first line of the segment where the commentary on it begins — not at the top of the section, and never inside a segment (if that commentary starts partway through a segment, the transclusion goes before the segment's first line).
 4. **Category C — nothing.** If a section makes no identifiable reference to a specific root verse or verse group (pure introduction, colophon remarks, historical background), no transclusion is inserted, even if the section falls within `section-scope`.
 5. **Ambiguous sections stop the run.** If a section could plausibly be A, B, or C (e.g., it names a verse range in its heading but then comments verse by verse in its body), do not guess. Report the section heading and the ambiguity to the human contributor and ask them to classify it before writing that section.
 6. **Sequential individual transclusions only.** Never emit a block-ID range. A group of N verses becomes N consecutive `![[...]]` lines.
@@ -561,7 +574,7 @@ Obsidian does not support block-ID range transclusion (`#^1-1:#^1-3`). Category 
    c. **Category C** if the section contains no identifiable reference to a specific root verse or verse group.
    d. If none of (a)–(c) applies cleanly, do not classify by default to B or any other category — flag as ambiguous per Rule 5.
 5. For every Category A section: determine the verse IDs in the group (from the heading's stated range, cross-checked against `root-text-file`'s block IDs). Insert `![[root-text-file#^N-V]]` for each, in order, directly after the heading line and before the first line of commentary prose. Skip any verse whose transclusion already exists there (Rule 8).
-6. For every Category B section: for each verse addressed, locate the first line of commentary specific to that verse and insert `![[root-text-file#^N-V]]` on the line immediately before it. Skip any verse whose transclusion already exists there.
+6. For every Category B section: for each verse addressed, locate the segment where the commentary specific to that verse begins and insert `![[root-text-file#^N-V]]` immediately before that segment's first line, with one blank line on each side. Skip any verse whose transclusion already exists there.
 7. For every Category C section: make no edit.
 8. Before writing, verify every verse ID used in steps 5–6 exists in the `root-text-file` lookup from step 1. If any is missing, stop and report the missing ID(s) without writing.
 9. Write `commentary-file` with the insertions applied. Do not alter any other byte of the file.
@@ -596,7 +609,7 @@ Two transclusion types are supported:
 
 1. **Version-to-version** — align two root-text or translation files verse by verse by inserting transclusions of file A into file B (or bidirectionally). Matching uses Obsidian block IDs where both files have them; falls back to meaning-based position matching when one file lacks IDs, in which case the human must confirm every proposed match before the file is modified.
 
-2. **Verse-into-commentary** — insert a transclusion of the root-text verse(s) at the correct structural position in one or more commentary files. For Tibetan master's commentaries the transclusion is placed on the line immediately before the specific sa-bcad (ས་བཅད།) phrase that introduces the commentary section for those verse(s). For non-Tibetan-master commentaries the transclusion is placed at the very beginning of the passage that discusses those verse(s).
+2. **Verse-into-commentary** — insert a transclusion of the root-text verse(s) at the correct structural position in one or more commentary files. For Tibetan master's commentaries the transclusion is placed before the segment that holds the specific sa-bcad (ས་བཅད།) phrase introducing the commentary section for those verse(s) — or right after the heading, when a heading introduces it. For non-Tibetan-master commentaries the transclusion is placed before the segment where the passage that discusses those verse(s) begins. Either way it is never inside a segment and never before a heading.
 
 ---
 
@@ -698,20 +711,31 @@ Insert the transclusion of `source-file#^N-V` immediately before the correspondi
 
 #### Type 2 placement — Tibetan master's commentary
 
-For a Tibetan master's commentary, the transclusion is placed on the line **immediately before** the sa-bcad phrase (structural announcement) that introduces the commentary section for those verse(s). The sa-bcad phrase is the Tibetan enumeration phrase that opens a section (e.g., `གཉིས་པ་རིན་པོ་ཆེའི་དཔེས་བསྔགས་པ་ནི།`). A blank line precedes the transclusion block, and no blank line is inserted between the transclusion and the sa-bcad line:
+For a Tibetan master's commentary, the transclusion is placed **immediately before the segment** that holds the sa-bcad phrase (structural announcement) introducing the commentary section for those verse(s). The sa-bcad phrase is the Tibetan enumeration phrase that opens a section (e.g., `གཉིས་པ་རིན་པོ་ཆེའི་དཔེས་བསྔགས་པ་ནི།`). One blank line on each side, per the house rule; if the sa-bcad is not the first line of its segment, the transclusion still goes before the segment's first line:
 
 ```
 ཞེས་པ་ལྟར་རོ། །
 
 ![[1-SOURCES/Text/<root-text>.md#^1-11]]
+
 གཉིས་པ་རིན་པོ་ཆེའི་དཔེས་བསྔགས་པ་ནི།
 ```
 
-If the verse section is introduced by a Markdown heading (e.g., `### 1.2 ...`) rather than an inline sa-bcad, place the transclusion immediately before that heading line instead.
+If the verse section is introduced by a Markdown heading (e.g., `### 1.2 ...`) rather than an inline sa-bcad, place the transclusion **right after that heading line**, before the first segment under it — never before the heading, where the parser's scope would end at once and align nothing:
+
+```
+### གཉིས་པ་རིན་པོ་ཆེའི་དཔེས་བསྔགས་པ། ^1-2-0
+
+![[1-SOURCES/Text/<root-text>.md#^1-11]]
+
+དང་པོ་ནི། … ^1-5
+```
+
+If the commentary is going to the API through `parser-commentary`, use **Mode 5** instead: it also repeats the transclusion under every heading of the verse's sub-tree.
 
 #### Type 2 placement — other commentary
 
-For non-Tibetan-master commentaries, insert the transclusion at the very beginning of the passage identified as discussing those verse(s), preceded and followed by a blank line:
+For non-Tibetan-master commentaries, insert the transclusion immediately before the first line of the segment where the passage discussing those verse(s) begins, preceded and followed by a blank line (if the passage begins under a heading, right after the heading):
 
 ```
 ![[1-SOURCES/Text/<root-text>.md#^1-11]]
@@ -729,9 +753,9 @@ For non-Tibetan-master commentaries, insert the transclusion at the very beginni
 4. **Never modify existing content.** Insertions only. Do not reorder, reformat, or delete any existing text.
 5. **Block ID mismatch stops execution (Type 1, both-have-IDs case).** If the same block ID (`^N-V`) is present in one file but absent in the other, or if the verse counts differ across the target range, report every mismatch to the human before writing any changes. Do not proceed until the human confirms.
 6. **Meaning-based matching requires human confirmation (Type 1, one-lacks-IDs case).** Present the full proposed match list (source verse text → target verse position) before writing. Do not proceed until the human confirms or corrects.
-7. **Sa-bcad identification (Type 2, tibetan-master).** The sa-bcad to insert before is identified by:
-   a. Markdown headings with block IDs ending in `-0` (e.g., `^1-2-0`, `^1-2-1-0`) — insert immediately before that heading line.
-   b. Inline Tibetan structural enumeration phrases — ordinal words (གཅིག་པ་, གཉིས་པ་, གསུམ་པ་, བཞི་པ་, etc. or their equivalents) followed by a topic phrase ending in ནི། or ནི། །. These are the inline sa-bcad phrases. Insert immediately before the matching phrase.
+7. **Sa-bcad identification (Type 2, tibetan-master).** The sa-bcad that places the transclusion is identified by:
+   a. Markdown headings with block IDs ending in `-0` (e.g., `^1-2-0`, `^1-2-1-0`) — insert immediately **after** that heading line, never before it.
+   b. Inline Tibetan structural enumeration phrases — ordinal words (གཅིག་པ་, གཉིས་པ་, གསུམ་པ་, བཞི་པ་, etc. or their equivalents) followed by a topic phrase ending in ནི། or ནི། །. These are the inline sa-bcad phrases. Insert immediately before the first line of the segment that holds the matching phrase.
    c. If no sa-bcad can be confidently identified for a verse, report it and ask the human to specify the insertion point before writing.
 8. **Commentary-section matching (Type 2).** Identify the correct commentary section by:
    a. First: check whether the commentary has a TOC or explicit structural outline and use it to locate the section for the verse(s).
@@ -753,7 +777,7 @@ For non-Tibetan-master commentaries, insert the transclusion at the very beginni
    a. Intersect the two lists over the requested `verse-range`.
    b. Identify any IDs present in one file but absent in the other. List every mismatch.
    c. If mismatches exist: present the full mismatch report to the human. Ask: "Proceed with matching verses only, or stop?" Do not write until the human responds.
-   d. If no mismatches (or the human confirmed): for each matched ID, check if `![[source-file#^N-V]]` already exists adjacent to the target verse block. If yes, skip. If no, insert the transclusion immediately before `^N-V` in `target-file`.
+   d. If no mismatches (or the human confirmed): for each matched ID, check if `![[source-file#^N-V]]` already exists adjacent to the target verse block. If yes, skip. If no, insert the transclusion immediately before the first line of the segment that ends in `^N-V` in `target-file`, with one blank line on each side.
 5. **If `target-file` lacks block IDs:**
    a. Align source verses to target verse positions by order and meaning within the requested range.
    b. Produce a numbered match list: `source ^N-V "[first few words of source verse]" → target line N "[first few words of target verse]"`.
@@ -771,11 +795,11 @@ For non-Tibetan-master commentaries, insert the transclusion at the very beginni
    c. **If `commentary-type` is `tibetan-master`:**
       i. Locate the sa-bcad phrase or Markdown heading that introduces the commentary section for each target verse. Use Rule 7 (sa-bcad identification) and Rule 8 (commentary-section matching).
       ii. If a sa-bcad or heading cannot be confidently identified for any verse, report the uncertainty to the human and ask them to specify the insertion line before proceeding.
-      iii. Check whether `![[root-text-file#^N-V]]` already appears on the line immediately before the identified sa-bcad. If yes, skip. If no, insert the transclusion on the line immediately before the sa-bcad. Ensure a blank line precedes the transclusion block and no blank line separates the transclusion from the sa-bcad line.
+      iii. Check whether `![[root-text-file#^N-V]]` already appears at the insertion point: before the segment holding the identified sa-bcad, or right after the identified heading. If yes, skip. If no, insert it there, with one blank line on each side.
    d. **If `commentary-type` is `other`:**
       i. Locate the beginning of the passage that discusses the target verse(s) using Rule 8.
       ii. If the passage start cannot be identified, report and ask the human.
-      iii. Insert the transclusion block at that point, surrounded by blank lines on both sides.
+      iii. Insert the transclusion block before the first line of the segment where the passage begins (right after the heading, if it begins under one), surrounded by blank lines on both sides.
    e. Write the modified commentary file.
    f. Report: file path, verse(s) inserted, and the sa-bcad phrase or passage-start text before/at which each transclusion was placed.
 
@@ -788,6 +812,7 @@ For non-Tibetan-master commentaries, insert the transclusion at the very beginni
 - [ ] Mismatch report produced and human confirmation obtained before writing when block IDs diverge (Type 1, both-have-IDs)
 - [ ] Full match list produced and human confirmation obtained before writing when one file lacks block IDs (Type 1)
 - [ ] Sa-bcad or commentary passage correctly identified for every verse; human consulted for any uncertain placements (Type 2, tibetan-master)
+- [ ] Every transclusion before the first line of a segment, or right after a heading — none inside a segment, none before a heading; one blank line on each side
 - [ ] No existing transclusion duplicated at any insertion point
 - [ ] Every inserted transclusion uses the full vault-relative path
 - [ ] No existing text deleted, reordered, or rephrased in any file

@@ -39,6 +39,9 @@ if "--source" in sys.argv:
     _args = [a for a in _args if a != TRANSCLUSION_BASE]
 else:
     sys.exit(__doc__)
+if not TRANSCLUSION_BASE.endswith(".md") or "/" not in TRANSCLUSION_BASE:
+    sys.exit("--source must be the full vault-relative path with .md "
+             f"(e.g. 1-SOURCES/Text/bo-root-text.md), got: {TRANSCLUSION_BASE!r}")
 
 if not _args:
     sys.exit("give the target file to receive the transclusions")
@@ -54,18 +57,21 @@ dry_run = "--dry-run" in sys.argv
 
 
 def process(path: str) -> tuple[list[str], list[str]]:
-    with open(path, "r", encoding="utf-8") as f:
+    # newline="" keeps the file's own line endings (text mode on Windows would
+    # rewrite an LF file as CRLF)
+    with open(path, "r", encoding="utf-8", newline="") as f:
         lines = f.readlines()
+    eol = "\r\n" if any(l.endswith("\r\n") for l in lines) else "\n"
 
     output: list[str] = []
     inserted: list[str] = []
 
     for line in lines:
-        stripped = line.rstrip("\n")
+        stripped = line.rstrip("\r\n")
         m = VERSE_ID_RE.search(stripped)
         if m:
             block_id = f"^{m.group(1)}-{m.group(2)}"
-            transclusion = f"![[{TRANSCLUSION_BASE}#{block_id}]]\n"
+            transclusion = f"![[{TRANSCLUSION_BASE}#{block_id}]]{eol}"
             # Skip if this transclusion already exists immediately before this
             # verse (walk back past any trailing blank lines to find the last
             # non-blank line).
@@ -73,15 +79,17 @@ def process(path: str) -> tuple[list[str], list[str]]:
             for prev in reversed(output):
                 if prev.strip() == "":
                     continue
-                if prev.rstrip("\n") == transclusion.rstrip("\n"):
+                if prev.rstrip("\r\n") == transclusion.rstrip("\r\n"):
                     already_there = True
                 break
             if not already_there:
-                # Insert transclusion + blank line before the verse line.
-                # The blank line already present in output before this verse
-                # becomes the blank line before the transclusion block.
+                # Insert transclusion + blank line before the verse line, with
+                # one blank line before it too: the blank already in output
+                # when there is one, a new one when the previous line is text.
+                if output and output[-1].strip() != "":
+                    output.append(eol)
                 output.append(transclusion)
-                output.append("\n")
+                output.append(eol)
                 inserted.append(block_id)
         output.append(line)
 
@@ -101,6 +109,6 @@ if inserted:
 if dry_run:
     print("\n[dry-run] No file written.")
 else:
-    with open(TARGET_PATH, "w", encoding="utf-8") as f:
+    with open(TARGET_PATH, "w", encoding="utf-8", newline="") as f:
         f.writelines(output_lines)
     print("\nFile written successfully.")
