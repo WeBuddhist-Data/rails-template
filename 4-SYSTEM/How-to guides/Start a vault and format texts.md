@@ -82,7 +82,15 @@ Do this once, in the first commit of the new vault.
 
 ### 1.5 Later: pull template updates
 
-When `rails-template` gains a new skill or a fixed script, copy it across by hand, following [Sync with rails-template](Sync%20with%20rails-template.md). That guide also lists what must never be synced (`1-SOURCES/`, `2-RAILS/`, the vault annex, …).
+When `rails-template` gains a new skill or a fixed script, ask the AI for it:
+
+```text
+/template-sync
+Bring this vault up to date with rails-template. Explain the plan to me before
+changing anything, and keep every change we made to our own skills and scripts.
+```
+
+The `template-sync` skill does not copy the template's files over yours. It works out what the template changed and what you changed in each file, and keeps both. You decide anything that genuinely clashes, and you see the full result before it is committed. It never touches your texts, rails, outputs, vault annex, or skills marked `vault-local`. The lists of what is synced and what never is are in [Sync with rails-template](Sync%20with%20rails-template.md).
 
 ---
 

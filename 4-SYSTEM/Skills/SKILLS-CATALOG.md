@@ -421,6 +421,10 @@ Read-only weekly audit in eight checks: skill registration and frontmatter, rail
 Adds standard properties to a file by extracting details from its title and colophon. Largely superseded by the frontmatter skills and `extract-source-metadata`.
 → [`property-creator/SKILL.md`](property-creator/SKILL.md)
 
+### `template-sync`
+Brings the latest rails-template updates into a vault made from it by a three-way merge per file, so each template change lands inside the vault's own version and its customisations survive. A script plans, applies and records the sync; the agent resolves conflicts with a person. Only template paths are touched; the annex, vault content and `vault-local` skills never are.
+→ [`template-sync/SKILL.md`](template-sync/SKILL.md)
+
 ---
 
 ## Retired skills

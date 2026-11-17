@@ -59,6 +59,10 @@ Files that carry generic methodology and should stay in sync across all vaults:
 
 ## When pulling from rails-template into a vault
 
+**Use the `template-sync` skill** ([`SKILL.md`](../Skills/template-sync/SKILL.md)): ask the AI "/template-sync". It merges each template change into the vault's own version of the file, three-way, so the vault's customisations survive. It follows the two lists above, resolves conflicts with you, and records the template commit it reached in `.rails-template-sync.json`. A vault that does not have the skill yet gets it this way too: see the skill's step 0.
+
+The manual route, for a single file or when the skill cannot be used:
+
 1. Open both repos side by side.
 2. For each file in the "safe to sync" list above, diff template vs vault.
 3. Apply additions and structural improvements to the vault copy.
