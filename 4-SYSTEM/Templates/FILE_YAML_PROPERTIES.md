@@ -57,7 +57,7 @@ Each key must be a language code the API knows (`bo`, `en`, `sa`, `zh`, …), wi
 
 A bare string (`- ཕྱག་འཚལ་ཉེར་གཅིག`) is still accepted and keyed with the file's own `lang_tag`, but write the keyed form so the language is never guessed.
 
-> **Caution — other-language alt titles.** The library makes every alt title a title of the text in its language, and titles are unique per language. An `en` alt title on a Tibetan text therefore claims that English title: a later English translation with the same title is refused (HTTP 422), and an uploaded alt title cannot be removed. Add one only when no translation will carry that title. `commentary-upload` refuses them on commentaries.
+> **Caution — other-language alt titles.** The library makes every alt title a title of the text in its language, and titles are unique per language. An `en` alt title on a Tibetan text therefore claims that English title: a later English translation with the same title is refused (HTTP 422), and an uploaded alt title cannot be removed. Add one only when no translation will carry that title. `library-upload` refuses them on a new text.
 
 **Exception — Pali (`lang_tag: pi`):** titles are still keyed `pi`, but must be written in Roman script (e.g. IAST: `Dhammasaṅgaṇī`). The linter errors on any non-Latin script (Sinhala, Thai, Burmese, Devanagari, …).
 

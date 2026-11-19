@@ -385,25 +385,21 @@ Grades one plan day file against the plan's declared session shape, its groundin
 
 ## 13. Publishing
 
-### `root-text-upload`
-Lints, parses and uploads a root text to the library backend as a text, an edition and a table of contents. The root goes first: its translations need its ids.
-→ [`root-text-upload/SKILL.md`](root-text-upload/SKILL.md)
+### `library-upload`
+Keeps the library in step with the vault, per environment (dev, prod, …): each note's state, then push what is missing, patch what changed in place, re-segment under a developer gate, delete annotations or alignments, verify — for root texts, translations and commentaries (text, edition, table of contents, yigchungs, durchens, footnotes, alignment) and audio (audio, recordings, cues). Payloads come from the vault's own linter and parser. Plans first; nothing is sent without explicit confirmation. The root goes first: its translations and commentaries need its ids.
+→ [`library-upload/SKILL.md`](library-upload/SKILL.md)
 
-### `commentary-upload`
-Lints, parses and uploads a commentary to the library backend as its own text with an edition, a table of contents and an alignment to the root edition's segments.
-→ [`commentary-upload/SKILL.md`](commentary-upload/SKILL.md)
+### `convert-audio`
+Converts WAV/AIFF recordings to AAC .m4a (about 24× smaller, exactly the same length) on Windows or macOS with nothing to install, so they fit the library's upload limit.
+→ [`convert-audio/SKILL.md`](convert-audio/SKILL.md)
 
-### `yigchung-upload`
-Parses the `<small>` yigchung marks out of an uploaded root text or translation and attaches them to the edition as yigchung annotations.
-→ [`yigchung-upload/SKILL.md`](yigchung-upload/SKILL.md)
+### `otr-to-mapping`
+Fills an audio note's Mapping table (Start/End per root block) from its oTranscribe .otr timestamps, ready for `library-upload` to send as cues.
+→ [`otr-to-mapping/SKILL.md`](otr-to-mapping/SKILL.md)
 
 ### `edition-spacing-fix`
 Scans a published edition for spacing errors, records every hit in a mapping file, and after human review applies the fixes.
 → [`edition-spacing-fix/SKILL.md`](edition-spacing-fix/SKILL.md)
-
-### `translation-upload`
-Uploads a finished translation to the library backend: lint, parse, then create the text, edition, alignment and table of contents. Dry-run by default; `--execute` needs explicit human confirmation every time.
-→ [`translation-upload/SKILL.md`](translation-upload/SKILL.md)
 
 ---
 
@@ -436,17 +432,21 @@ the job went, rather than concluding it was dropped.
 | Retired | Now done by |
 |---|---|
 | `commentary-frontmatter` | `frontmatter` |
+| `commentary-upload` | `library-upload` (`commentary push`) |
 | `segment-commentary` | `commentary-pipeline` (steps 1–2: `commentary-preclean`, `commentary-segment`) |
 | `glossary-combine` | `bilingual-glossary` |
 | `glossary-extract-raw` | `bilingual-glossary` |
 | `glossary-select` | `bilingual-glossary` |
 | `reference-frontmatter` | `frontmatter` |
 | `root-text-frontmatter` | `frontmatter` |
+| `root-text-upload` | `library-upload` (`text push`) |
 | `section-summary-combined` | `section-summary` |
 | `section-summary-raw` | `section-summary` |
 | `source-property-extractor` | `extract-source-metadata` |
 | `toc-generate` | `commentary-toc-extract` + `commentary-toc-ingest` (root texts: `root-text-toc-extract` + `root-text-toc-ingest`) |
 | `translation-frontmatter` | `frontmatter` |
+| `translation-upload` | `library-upload` (`translation push`) |
+| `yigchung-upload` | `library-upload` (`push` / `update --only yigchungs`) |
 
 ---
 

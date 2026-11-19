@@ -13,7 +13,7 @@
 
 **Not specific to pali-chanting-text.** The file names in the README examples and the `--help` epilog (`तिसरण–पञ्चशील_hi`) come from that vault. The code only assumes the standard layout: `1-SOURCES/` at the vault root, and the parser output in `4-SYSTEM/scripts/parser-root-text/output/`.
 
-**Overlap with the skills.** `Skills/root-text-upload` and `Skills/translation-upload` cover the same API calls with their own scripts. They chain their own copies of the linter and parser, keep a ledger, and run a dry run by default. This uploader is the plain script-level version: it works on payloads you have already produced with the shared `scripts/` linter and parser, and it sends calls unless you pass `--dry-run`.
+**Superseded by `Skills/library-upload`** (2026-11-19), which builds payloads with the same shared `scripts/` linter and parser, keeps dev and prod apart, shows a plan before sending, patches in place instead of re-creating, and never deletes a text. (Before that, `Skills/root-text-upload` and `Skills/translation-upload` covered the same calls with their own copies of the linter and parser.) This uploader is the plain script-level version, kept for reference: it sends calls unless you pass `--dry-run`, and its `--recreate` deletes and re-creates texts — do not use it on published texts.
 
 ## Local changes
 

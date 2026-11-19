@@ -217,7 +217,7 @@ words. Don't fix anything yet.
 *Upload (a test run first):*
 
 ```text
-/root-text-upload 1-SOURCES/Text/<file>.md — dry run only.
+/library-upload text push --env dev 1-SOURCES/Text/<file>.md — show me the plan only.
 ```
 
 **Tips**
@@ -374,7 +374,7 @@ alt_titles:
 
 Every key must be a language code the API knows (`bo`, `en`, `sa`, `zh`, …; not `bod` or `english`), and a Pali (`pi`) title must be in Roman script. A bare string (`- ཕྱག་འཚལ་ཉེར་གཅིག`) is still accepted and keyed with the file's own `lang_tag`, but write the keyed form.
 
-> ⚠️ **An alt title in another language becomes a title of this text in that language.** The library keeps titles unique per language, so `en: "Praise to the Twenty-One Tārās"` on the Tibetan root claims that English title: an English translation uploaded later with the same title is refused (HTTP 422 "title … already exists"), and an uploaded alt title cannot be removed. Give another-language alt titles only when no translation will carry that title. `commentary-upload` refuses them on a commentary.
+> ⚠️ **An alt title in another language becomes a title of this text in that language.** The library keeps titles unique per language, so `en: "Praise to the Twenty-One Tārās"` on the Tibetan root claims that English title: an English translation uploaded later with the same title is refused (HTTP 422 "title … already exists"), and an uploaded alt title cannot be removed. Give another-language alt titles only when no translation will carry that title. `library-upload` refuses them on a new text.
 
 Never fill these by hand: `commentary_of` / `translation_of` (the linter takes them from the root's `text_id`), and `text_id` / `edition_id` / `toc_id` (the upload writes them). Upload the root text first, so its `text_id` exists. The full schema is in [`4-SYSTEM/Templates/FILE_YAML_PROPERTIES.md`](../Templates/FILE_YAML_PROPERTIES.md).
 
@@ -611,16 +611,17 @@ python 4-SYSTEM/scripts/parser-commentary/parser.py "1-SOURCES/Commentaries/<fil
 
 ### 2.9 Upload
 
-Upload with the skills, which lint, parse, show a dry run, and upload only after you confirm:
+Upload with the `library-upload` skill. It lints and parses with the vault's own tools, shows each note's state and the plan, and sends only after you confirm. Name the environment every time — **dev** to test, **prod** only when you mean it:
 
-| File | Skill |
+| File | Command |
 |---|---|
-| Root text — **always first** | `root-text-upload` |
-| Commentary | `commentary-upload` |
-| Translation | `translation-upload` |
-| Yigchung marks of an uploaded text | `yigchung-upload` |
+| Root text — **always first** | `library.py text push --env dev <file>` |
+| Commentary | `library.py commentary push --env dev <file>` |
+| Translation | `library.py translation push --env dev <file>` |
+| Yigchung marks, durchens, footnotes, table of contents | part of `push`; changed later: `update --only yigchungs` (etc.) |
+| What is out of date? | `library.py <kind> status --env dev` |
 
-They need the API key in the environment (`WEBUDDHIST_API_KEY`, kept in a git-ignored `4-SYSTEM/scripts/.env`, never committed). After the upload, the file's frontmatter carries its `text_id`, `edition_id` and `toc_id`: commit them.
+A protected environment (prod) needs its API key (`WEBUDDHIST_API_KEY` or `WEBUDDHIST_API_KEY_PROD`, kept in a git-ignored `4-SYSTEM/scripts/.env`, never committed). The frontmatter records prod's `text_id`, `edition_id`, `toc_id` and `aligned_to_edition_id` (written only when uploading to prod): commit them. Ids on every environment are also kept in `4-SYSTEM/ledgers/` — git-ignored, keep a backup.
 
 ---
 
