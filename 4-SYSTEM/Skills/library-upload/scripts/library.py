@@ -15,7 +15,8 @@ Commands:
   push     create what is missing          --only (text kinds): text, edition, toc, yigchungs,
                                            durchens, footnotes, alignment;  (audio): audio, recording, cues
   update   PATCH / re-sync what changed    --only (text kinds): details, content, toc, yigchungs,
-                                           durchens, footnotes;  (audio): audio, recording
+                                           durchens, footnotes, ids;  (audio): audio, recording
+           (ids: frontmatter ids that are gone from the server get the server's current id)
   replace  text kinds: re-segmentation — DELETE segmentation -> one full content REPLACE ->
            POST segmentation -> annotations again; refused for a linked text unless --dev.
            audio: the file changed -> new recording on the same audio, old one deleted, cues again.
@@ -27,7 +28,8 @@ Every write prints its plan and sends nothing without --yes; a protected environ
 also needs --confirm <env>. Text payloads come from the vault's own linter and parser
 (4-SYSTEM/scripts/); read-only commands put back any frontmatter the linter fills in.
 Ids: the notes' frontmatter holds one environment's (default prod: text_id, edition_id,
-toc_id, aligned_to_edition_id), written only on that environment and never overwritten;
+toc_id, aligned_to_edition_id), written only on that environment and never overwritten —
+except an id this tool replaced or confirmed gone (state ids-stale), which gets its successor;
 every environment's ids are in the git-ignored ledgers 4-SYSTEM/ledgers/<env>/.
 """
 from __future__ import annotations
@@ -56,7 +58,7 @@ ONLY = {
 for _k in TEXT_KINDS:
     _push = ("text", "edition", *ANN) + (("alignment",) if _k != "text" else ())
     ONLY[(_k, "push")] = (_push, _push)
-    ONLY[(_k, "update")] = (("details", "content", *ANN), ("details", "content", *ANN))
+    ONLY[(_k, "update")] = (("details", "content", *ANN, "ids"), ("details", "content", *ANN, "ids"))
     ONLY[(_k, "delete")] = ((*ANN,) + (("alignment",) if _k != "text" else ()), ())
 
 
@@ -113,6 +115,10 @@ def main(argv=None):
     ap.add_argument("--audio-dir", help="audio: folder holding the downloaded audio files")
     ap.add_argument("--dev", action="store_true",
                     help="the person running this is a developer: allows re-segmenting a linked text")
+    ap.add_argument("--full-replace", action="store_true",
+                    help="replace only, with --dev: re-segment every named note (delete segmentation, replace the "
+                         "whole content, post segmentation, annotations), even when in-place patching would do. "
+                         "Breaks its alignments: push them again afterwards.")
     ap.add_argument("--yes", action="store_true", help="send the plan (without it nothing is sent)")
     ap.add_argument("--confirm", help="repeat the environment's name to write to a protected one (prod)")
     ap.add_argument("--report", nargs="?", const="", metavar="FILE",
@@ -125,6 +131,8 @@ def main(argv=None):
                          "(vault root or 4-SYSTEM/scripts/). Never paste it into chat.")
     if a.command in WRITE and a.yes and env.protected and a.confirm != env.name:
         raise SystemExit(f"{env.name} is protected: add --confirm {env.name} to send")
+    if a.full_replace and (a.command != "replace" or not a.dev):
+        raise SystemExit("--full-replace works only with `replace` and --dev")
     if a.command == "delete":
         if not a.paths:
             raise SystemExit("delete needs the notes named explicitly (no default to everything)")
@@ -144,7 +152,8 @@ def main(argv=None):
         mod, fix = A, A.FIX
     else:
         from webuddhist import text as T
-        ctx = T.Ctx(env=env, client=Client(env), ledger=Ledger(env.name, "texts"), dev=a.dev)
+        ctx = T.Ctx(env=env, client=Client(env), ledger=Ledger(env.name, "texts"), dev=a.dev,
+                    full_replace=a.full_replace)
         states = T.assess_all(a.kind, a.paths, ctx, keep_edits=sending)
         mod, fix = T, T.FIX
 
