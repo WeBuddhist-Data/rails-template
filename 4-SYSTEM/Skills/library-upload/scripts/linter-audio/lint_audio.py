@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Lint audio notes against the v2 audio API and build their upload payloads.
 
-usage: lint_audio.py [NOTE_OR_FOLDER ...] [--live] [--host dev|prod] [--hash]
+usage: lint_audio.py [NOTE_OR_FOLDER ...] [--live] [--host dev|testing|prod] [--hash]
                      [--audio-dir DIR] [--require-file] [--no-output] [-q]
 
 With no path, lints every note under 1-SOURCES/Audio. Errors block the upload

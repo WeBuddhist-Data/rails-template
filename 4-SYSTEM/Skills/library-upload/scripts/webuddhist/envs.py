@@ -1,15 +1,20 @@
-"""The library's environments. dev and prod are built in; a vault adds more (e.g. `test`)
-in 4-SYSTEM/library-upload.json under "environments", and every command can use it.
+"""The library's environments: dev, testing and prod are built in; a vault can add or
+override one in 4-SYSTEM/library-upload.json under "environments".
 
-dev and prod are separate databases. dev was replicated from prod once, so texts from
-before that share ids; texts created since exist only where they were created. Ids
-are therefore always checked per environment, never assumed to carry over.
+  dev      https://dev.library.webuddhist.com/api   no key
+  testing  https://testing.library.webuddhist.com/api   key: testing_api_key
+  prod     https://library-prod.webuddhist.com      key: prod_api_key   (protected)
+
+They are separate databases. dev was replicated from prod once, so texts from before
+that share ids; texts created since exist only where they were created. Ids are
+therefore always checked per environment, never assumed to carry over.
 
 A `protected` environment needs `--confirm <name>` on top of `--yes` for any write.
-The API key (sent as X-API-Key) comes from, in order: the variable
-WEBUDDHIST_API_KEY_<ENV>, the variable named by `key_var`, then the same names (and
-`key_dotenv`) in the git-ignored `.env` at the vault root or in 4-SYSTEM/scripts/.
-It is never printed.
+The API key (sent as X-API-Key) is read, in order, from the environment variables
+WEBUDDHIST_API_KEY_<ENV>, <ENV>_API_KEY, `key_var`, then from the same names and
+`key_dotenv` (e.g. `testing_api_key=…`, `prod_api_key=…`) in the git-ignored `.env`
+at the vault root or in 4-SYSTEM/scripts/. Each environment reads only its own names,
+so a prod key is never sent to dev or testing. It is never printed.
 """
 from __future__ import annotations
 
@@ -28,8 +33,8 @@ class Env:
     key_dotenv: tuple = field(default_factory=tuple)
 
     def _names(self):
-        return [f"WEBUDDHIST_API_KEY_{self.name.upper()}", *( [self.key_var] if self.key_var else []),
-                *self.key_dotenv]
+        return [f"WEBUDDHIST_API_KEY_{self.name.upper()}", f"{self.name.upper()}_API_KEY",
+                *([self.key_var] if self.key_var else []), *self.key_dotenv]
 
     def api_key(self) -> str | None:
         for n in self._names():
@@ -58,9 +63,10 @@ class Env:
 
 
 ENVIRONMENTS = {
-    "dev": Env("dev", "https://library.webuddhist.com"),
+    "dev": Env("dev", "https://dev.library.webuddhist.com/api"),
+    "testing": Env("testing", "https://testing.library.webuddhist.com/api", key_dotenv=("testing_api_key",)),
     "prod": Env("prod", "https://library-prod.webuddhist.com", protected=True,
-                key_var="WEBUDDHIST_API_KEY", key_dotenv=("api_key",)),
+                key_dotenv=("prod_api_key", "WEBUDDHIST_API_KEY", "api_key")),   # the last two: older .env names
 }
 for _name, _e in CONFIG.get("environments", {}).items():
     ENVIRONMENTS[_name] = Env(_name, _e["url"], protected=bool(_e.get("protected", False)),

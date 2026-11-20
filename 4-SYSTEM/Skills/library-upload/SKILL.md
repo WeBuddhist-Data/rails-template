@@ -19,7 +19,7 @@ description: >
 One tool for everything the vault sends to the library, and for checking what is there:
 
 ```
-python 4-SYSTEM/Skills/library-upload/scripts/library.py <text|translation|commentary|audio> <command> --env <dev|prod> [notes or folders] [options]
+python 4-SYSTEM/Skills/library-upload/scripts/library.py <text|translation|commentary|audio> <command> --env <dev|testing|prod> [notes or folders] [options]
 ```
 
 Run it from the vault root. It builds every text payload with the vault's **own** shared
@@ -42,17 +42,17 @@ the rest of this skill.
 | `commentary` | `1-SOURCES/Commentaries/` (`file_type: commentary`) | `root_text:`; aligned commentary → root from its transclusions |
 | `audio` | `1-SOURCES/Audio/<text>/audio/*-recitation.md` | `root_text:`; cues from the note's Mapping table |
 
-- The environment (`--env`), always named. **dev** unless the person names another.
+- The environment (`--env`), always named: **dev** (`dev.library.webuddhist.com/api`), **testing** (`testing.library.webuddhist.com/api`) or **prod** (`library-prod.webuddhist.com`). dev unless the person names another.
 - The vault's shared linter and parser in `4-SYSTEM/scripts/` (text kinds).
 - For audio: the audio files (not in the repo; `Audio/` at the vault root, `--audio-dir` or `$AUDIO_FILES_DIR`).
-- Credentials: the API key for a protected environment, in the git-ignored `.env` (vault root or `4-SYSTEM/scripts/`) as `WEBUDDHIST_API_KEY_PROD` / `WEBUDDHIST_API_KEY`. Never typed into chat, never printed.
+- Credentials: testing and prod each need their own API key, in the git-ignored `.env` (vault root or `4-SYSTEM/scripts/`): `testing_api_key=…`, `prod_api_key=…` (dev needs none). Each environment reads only its own key. Never typed into chat, never printed.
 - Optional vault settings in `4-SYSTEM/library-upload.json` — only when the vault differs from the defaults:
 
 ```json
 {
   "frontmatter_env": "prod",
   "folders": {"translation": "3-TRANSFORMATIONS/Translations"},
-  "environments": {"test": {"url": "https://…", "protected": false}}
+  "environments": {"staging": {"url": "https://…", "protected": false, "key_dotenv": ["staging_api_key"]}}
 }
 ```
 
@@ -126,7 +126,7 @@ Audio: `new`, `partial`, `cues-pending` / `cues-changed` / `cues-extra`, `file-c
 
 ## Rules
 
-1. **Environments are never mixed.** `--env` is always given; ids are per environment.
+1. **Environments are never mixed.** `--env` is always given (dev, testing, prod); ids are per environment.
    dev was replicated from prod once: older texts share ids, newer ones exist only where
    they were made. Use dev unless the person names another. Writing to a protected
    environment (prod) needs `--confirm prod` as well as `--yes`, and only after the

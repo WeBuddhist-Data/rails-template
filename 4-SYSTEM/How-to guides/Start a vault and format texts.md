@@ -611,7 +611,7 @@ python 4-SYSTEM/scripts/parser-commentary/parser.py "1-SOURCES/Commentaries/<fil
 
 ### 2.9 Upload
 
-Upload with the `library-upload` skill. It lints and parses with the vault's own tools, shows each note's state and the plan, and sends only after you confirm. Name the environment every time — **dev** to test, **prod** only when you mean it:
+Upload with the `library-upload` skill. It lints and parses with the vault's own tools, shows each note's state and the plan, and sends only after you confirm. Name the environment every time — **dev** (`dev.library.webuddhist.com/api`) to try things, **testing** (`testing.library.webuddhist.com/api`), **prod** (`library-prod.webuddhist.com`) only when you mean it:
 
 | File | Command |
 |---|---|
@@ -621,7 +621,7 @@ Upload with the `library-upload` skill. It lints and parses with the vault's own
 | Yigchung marks, durchens, footnotes, table of contents | part of `push`; changed later: `update --only yigchungs` (etc.) |
 | What is out of date? | `library.py <kind> status --env dev` |
 
-A protected environment (prod) needs its API key (`WEBUDDHIST_API_KEY` or `WEBUDDHIST_API_KEY_PROD`, kept in a git-ignored `4-SYSTEM/scripts/.env`, never committed). The frontmatter records prod's `text_id`, `edition_id`, `toc_id` and `aligned_to_edition_id` (written only when uploading to prod): commit them. Ids on every environment are also kept in `4-SYSTEM/ledgers/` — git-ignored, keep a backup.
+testing and prod each need their own API key — `testing_api_key=…` and `prod_api_key=…` in a git-ignored `.env` (vault root or `4-SYSTEM/scripts/`), never committed; dev needs none. The frontmatter records prod's `text_id`, `edition_id`, `toc_id` and `aligned_to_edition_id` (written only when uploading to prod): commit them. Ids on every environment are also kept in `4-SYSTEM/ledgers/` — git-ignored, keep a backup.
 
 ---
 
