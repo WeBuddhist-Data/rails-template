@@ -45,7 +45,15 @@ the rest of this skill.
 - The environment (`--env`), always named: **dev** (`dev.library.webuddhist.com/api`), **testing** (`testing.library.webuddhist.com/api`) or **prod** (`library-prod.webuddhist.com`). dev unless the person names another.
 - The vault's shared linter and parser in `4-SYSTEM/scripts/` (text kinds).
 - For audio: the audio files (not in the repo; `Audio/` at the vault root, `--audio-dir` or `$AUDIO_FILES_DIR`).
-- Credentials: testing and prod each need their own API key, in the git-ignored `.env` (vault root or `4-SYSTEM/scripts/`): `testing_api_key=…`, `prod_api_key=…` (dev needs none). Each environment reads only its own key. Never typed into chat, never printed.
+- Credentials: every environment needs its own API key, even to read. They go in the git-ignored `.env` (vault root or `4-SYSTEM/scripts/`), one line each, with exactly these variable names:
+
+  ```
+  dev_api_key=…
+  testing_api_key=…
+  prod_api_key=…
+  ```
+
+  Each environment reads only its own key; without it the tool stops before sending anything. Never typed into chat, never printed.
 - Optional vault settings in `4-SYSTEM/library-upload.json` — only when the vault differs from the defaults:
 
 ```json

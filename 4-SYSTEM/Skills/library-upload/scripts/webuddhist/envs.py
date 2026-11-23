@@ -1,7 +1,7 @@
 """The library's environments: dev, testing and prod are built in; a vault can add or
 override one in 4-SYSTEM/library-upload.json under "environments".
 
-  dev      https://dev.library.webuddhist.com/api   no key
+  dev      https://dev.library.webuddhist.com/api   key: dev_api_key
   testing  https://testing.library.webuddhist.com/api   key: testing_api_key
   prod     https://library-prod.webuddhist.com      key: prod_api_key   (protected)
 
@@ -12,9 +12,10 @@ therefore always checked per environment, never assumed to carry over.
 A `protected` environment needs `--confirm <name>` on top of `--yes` for any write.
 The API key (sent as X-API-Key) is read, in order, from the environment variables
 WEBUDDHIST_API_KEY_<ENV>, <ENV>_API_KEY, `key_var`, then from the same names and
-`key_dotenv` (e.g. `testing_api_key=…`, `prod_api_key=…`) in the git-ignored `.env`
+`key_dotenv` (e.g. `dev_api_key=…`, `testing_api_key=…`, `prod_api_key=…`) in the git-ignored `.env`
 at the vault root or in 4-SYSTEM/scripts/. Each environment reads only its own names,
-so a prod key is never sent to dev or testing. It is never printed.
+so a prod key is never sent to dev or testing. It is never printed. Every environment
+needs its key, for reads too (dev since 2026-11-23).
 """
 from __future__ import annotations
 
@@ -63,7 +64,7 @@ class Env:
 
 
 ENVIRONMENTS = {
-    "dev": Env("dev", "https://dev.library.webuddhist.com/api"),
+    "dev": Env("dev", "https://dev.library.webuddhist.com/api", key_dotenv=("dev_api_key",)),
     "testing": Env("testing", "https://testing.library.webuddhist.com/api", key_dotenv=("testing_api_key",)),
     "prod": Env("prod", "https://library-prod.webuddhist.com", protected=True,
                 key_dotenv=("prod_api_key", "WEBUDDHIST_API_KEY", "api_key")),   # the last two: older .env names

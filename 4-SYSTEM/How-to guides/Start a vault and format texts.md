@@ -621,7 +621,7 @@ Upload with the `library-upload` skill. It lints and parses with the vault's own
 | Yigchung marks, durchens, footnotes, table of contents | part of `push`; changed later: `update --only yigchungs` (etc.) |
 | What is out of date? | `library.py <kind> status --env dev` |
 
-testing and prod each need their own API key — `testing_api_key=…` and `prod_api_key=…` in a git-ignored `.env` (vault root or `4-SYSTEM/scripts/`), never committed; dev needs none. The frontmatter records prod's `text_id`, `edition_id`, `toc_id` and `aligned_to_edition_id` (written only when uploading to prod): commit them. Ids on every environment are also kept in `4-SYSTEM/ledgers/` — git-ignored, keep a backup.
+Every environment needs its own API key, even to read, with exactly these variable names — `dev_api_key=…`, `testing_api_key=…` and `prod_api_key=…` — in a git-ignored `.env` (vault root or `4-SYSTEM/scripts/`), never committed. The frontmatter records prod's `text_id`, `edition_id`, `toc_id` and `aligned_to_edition_id` (written only when uploading to prod): commit them. Ids on every environment are also kept in `4-SYSTEM/ledgers/` — git-ignored, keep a backup.
 
 ---
 
