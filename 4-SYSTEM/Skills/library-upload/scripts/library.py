@@ -8,7 +8,7 @@ Run from the vault root. Kinds (default folders; override in 4-SYSTEM/library-up
   text         1-SOURCES/Text          root texts
   translation  1-SOURCES/Translations  aligned to the root from transclusions (or matching block ids)
   commentary   1-SOURCES/Commentaries  aligned commentary -> root from transclusions
-  audio        1-SOURCES/Audio         audio notes: audio, recordings, cues (dev only, for now)
+  audio        1-SOURCES/Audio         audio notes: audio, recordings, cues (only where the API has /v2/audios)
 
 Commands:
   status   each note's state on the environment (read-only)
@@ -43,7 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from webuddhist import envs  # noqa: E402
 from webuddhist import vault  # noqa: E402
-from webuddhist.api import Client  # noqa: E402
+from webuddhist.api import ApiError, Client  # noqa: E402
 from webuddhist.ledger import Ledger  # noqa: E402
 from webuddhist.plan import execute  # noqa: E402
 
@@ -71,6 +71,18 @@ def parse_only(kind, command, value):
     if bad:
         raise SystemExit(f"--only for {kind} {command}: unknown {sorted(bad)}; choose from {', '.join(allowed) or '-'}")
     return got
+
+
+def api_has(client, path):
+    """True / False: the environment's OpenAPI lists `path`; None when the spec cannot be read.
+
+    Each environment runs a different build (dev: the dev branch, testing: main, prod: the last
+    tagged release), so an endpoint can exist on one and not yet on another."""
+    try:
+        spec = client.get("/openapi.json")
+    except ApiError:
+        return None
+    return path in (spec or {}).get("paths", {})
 
 
 def print_status(states, env, fix):
@@ -144,6 +156,10 @@ def main(argv=None):
     sending = a.command in WRITE and a.yes
 
     if a.kind == "audio":
+        if api_has(Client(env), "/v2/audios/{audio_id}") is False:
+            raise SystemExit(f"{env.name} has no audio endpoints yet: it runs a build from before audio "
+                             f"(see {env.url}/__/health). Audio goes to the environments that have it "
+                             "(dev, testing) until a release with it is tagged for prod.")
         from webuddhist import audio as A
         if a.audio_dir:
             A.an.set_files_root(a.audio_dir)

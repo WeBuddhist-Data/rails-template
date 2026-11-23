@@ -5,9 +5,14 @@ override one in 4-SYSTEM/library-upload.json under "environments".
   testing  https://testing.library.webuddhist.com/api   key: testing_api_key
   prod     https://library-prod.webuddhist.com      key: prod_api_key   (protected)
 
-They are separate databases. dev was replicated from prod once, so texts from before
-that share ids; texts created since exist only where they were created. Ids are
-therefore always checked per environment, never assumed to carry over.
+Each runs its own build of the library API: dev the backend's `dev` branch, testing its
+`main` branch (everything merged from dev), prod only a release tagged vX.Y.Z on main.
+So an endpoint can be on dev and testing and not yet on prod; `GET <url>/__/health`
+shows the build. They are separate databases: testing is a copy of prod refreshed each
+release cycle, dev is reset from prod by hand. Texts from before the last copy share
+prod's ids; texts created since exist only where they were created, and a refresh wipes
+what was pushed only to testing. Ids are therefore always checked per environment, never
+assumed to carry over.
 
 A `protected` environment needs `--confirm <name>` on top of `--yes` for any write.
 The API key (sent as X-API-Key) is read, in order, from the environment variables

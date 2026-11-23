@@ -42,7 +42,23 @@ the rest of this skill.
 | `commentary` | `1-SOURCES/Commentaries/` (`file_type: commentary`) | `root_text:`; aligned commentary → root from its transclusions |
 | `audio` | `1-SOURCES/Audio/<text>/audio/*-recitation.md` | `root_text:`; cues from the note's Mapping table |
 
-- The environment (`--env`), always named: **dev** (`dev.library.webuddhist.com/api`), **testing** (`testing.library.webuddhist.com/api`) or **prod** (`library-prod.webuddhist.com`). dev unless the person names another.
+- The environment (`--env`), always named; dev unless the person names another. Each runs
+  its own build of the library API and holds its own data:
+
+  | `--env` | URL | Runs the backend's | Data |
+  |---------|-----|--------------------|------|
+  | **dev** | `dev.library.webuddhist.com/api` | `dev` branch: newest, unreleased | test data, reset from prod by hand |
+  | **testing** | `testing.library.webuddhist.com/api` | `main` branch: everything merged from dev | a copy of prod, refreshed each release cycle |
+  | **prod** | `library-prod.webuddhist.com` | last release tagged `vX.Y.Z` on main | real |
+
+  A backend feature reaches testing when dev is merged into main, and prod only when a
+  release is tagged; `GET <url>/__/health` shows what an environment runs (`dev-<sha>`,
+  `main-<sha>`, or the release). **As of 2026-11-23 prod runs API 2.12.0, from before the
+  2026-11-19 merge: it has no audio (`/v2/audios`, recordings with cues) and no
+  footnotes.** Until a release with them is tagged, audio goes to dev and testing only
+  (`audio` commands stop on an environment without `/v2/audios`), and footnotes on prod
+  are reported as unsupported, not sent (Rule 9). Text, translation and commentary uploads
+  send the same requests on all three (checked against each environment's OpenAPI).
 - The vault's shared linter and parser in `4-SYSTEM/scripts/` (text kinds).
 - For audio: the audio files (not in the repo; `Audio/` at the vault root, `--audio-dir` or `$AUDIO_FILES_DIR`).
 - Credentials: every environment needs its own API key, even to read. They go in the git-ignored `.env` (vault root or `4-SYSTEM/scripts/`), one line each, with exactly these variable names:
@@ -138,7 +154,7 @@ dev audio and recording belongs to which note** — keep a backup.
 | `root-not-on-env` | push the root text to that environment first |
 | `link-differs` | `translation_of` / `commentary_of` points elsewhere; settable only at creation → stop, ask a developer |
 | `blocked` | the linter or parser refused the note (reason quoted) → fix the note, never the check |
-| `gone` / `edition-mismatch` | the server and the records disagree → stop and report |
+| `gone` / `edition-mismatch` | the server and the records disagree → stop and report. On testing (or dev) right after a refresh from prod, `gone` is expected for whatever was pushed only there; say so, and leave the ledger alone (Rule 11) |
 | `ids-stale` | (frontmatter environment only) a frontmatter id is gone from the server and one clear successor is there — e.g. the `toc_id` after a TOC was replaced → `update --only ids`, which writes only that frontmatter line and the ledger (Rule 13) |
 
 Audio: `new`, `partial`, `cues-pending` / `cues-changed` / `cues-extra`, `file-changed`,
@@ -148,10 +164,13 @@ Audio: `new`, `partial`, `cues-pending` / `cues-changed` / `cues-extra`, `file-c
 ## Rules
 
 1. **Environments are never mixed.** `--env` is always given (dev, testing, prod); ids are per environment.
-   dev was replicated from prod once: older texts share ids, newer ones exist only where
-   they were made. Use dev unless the person names another. Writing to a protected
-   environment (prod) needs `--confirm prod` as well as `--yes`, and only after the
-   person said "prod" for this very action. Audio is uploaded to dev only, for now.
+   testing is a copy of prod and dev was reset from prod: texts from before the last copy
+   share prod's ids, newer ones exist only where they were made. Refreshing testing from
+   prod replaces its whole database, so whatever was pushed only to testing is gone after
+   it. Use dev unless the person names another. Writing to a protected environment (prod)
+   needs `--confirm prod` as well as `--yes`, and only after the person said "prod" for
+   this very action. Send to an environment only what its API has (see Inputs): audio
+   and footnotes are not on prod until a release with them is tagged.
 2. **Plan, ask, send, check.** Run the command without `--yes`, tell the person in plain
    words what will be sent (which notes, which calls, which environment), quote every
    `skip` / `blocked` line, and only after their clear yes run it with `--yes`; then
