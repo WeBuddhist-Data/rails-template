@@ -22,6 +22,7 @@ environment actually holds. That comparison gives each note its state(s):
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -30,7 +31,7 @@ from pathlib import Path
 
 from .api import ApiError, items
 from .plan import NotePlan, Step
-from .vault import VAULT
+from .vault import LEDGERS, VAULT
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "linter-audio"))
 import audio_note as an  # noqa: E402
@@ -43,7 +44,7 @@ FIX = {
     "audio-details": "update --only audio", "recording-details": "update --only recording",
     "recording-edition": "update --only recording", "blocked": "fix the note: see the lint errors",
     "text-not-on-env": "upload the root text to this environment first",
-    "twin": "nothing: the other note is the uploaded one", "gone": "check by hand (verify)",
+    "twin": "nothing: the other note is (or will be) the uploaded one", "gone": "check by hand (verify)",
     "extra-recordings": "check by hand (verify)",
 }
 # states a write command never acts on
@@ -205,7 +206,36 @@ def assess_all(paths, ctx: Ctx, *, artist_op=None, progress=True):
         states.append(assess(n, ctx))
     if progress:
         print("\r" + " " * 60 + "\r", end="", file=sys.stderr)
+    _mark_unrecorded_twins(states)
     return states
+
+
+def _mark_unrecorded_twins(states):
+    """Twins (same text and artist, so the same ledger key) that no ledger entry tells
+    apart yet — e.g. both new on a fresh environment. Only one may be uploaded, or the
+    text gets the same recitation twice: keep the one another environment's ledger
+    uploaded, else the first that is not blocked (by path), and mark the others twin."""
+    elsewhere = {}                                  # key -> note uploaded on another environment
+    for path in sorted(LEDGERS.glob("*/audio.json")):
+        try:
+            for k, e in json.loads(path.read_text(encoding="utf-8")).items():
+                if e.get("audio_id") and e.get("note"):
+                    elsewhere.setdefault(k, note_key(e["note"]))
+        except (OSError, ValueError):
+            continue
+    groups = {}
+    for st in states:
+        if "twin" not in st.flags and not (st.entry and st.entry.get("audio_id")):
+            groups.setdefault(st.key, []).append(st)
+    for key, group in groups.items():
+        if len(group) < 2:
+            continue
+        keep = sorted(group, key=lambda s: (note_key(s.rel) != elsewhere.get(key), "blocked" in s.flags,
+                                            str(s.rel)))[0]
+        for st in group:
+            if st is not keep:
+                st.flags.clear()
+                st.flags["twin"] = f"same text and artist as {keep.rel}, which is the one to upload"
 
 
 # ------------------------------------------------------------------ steps

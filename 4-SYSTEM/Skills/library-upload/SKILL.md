@@ -159,7 +159,10 @@ dev audio and recording belongs to which note** — keep a backup.
 
 Audio: `new`, `partial`, `cues-pending` / `cues-changed` / `cues-extra`, `file-changed`,
 `audio-details` / `recording-details` / `recording-edition`, `blocked`, `text-not-on-env`,
-`twin`, `gone` — each with the command to run in the status output.
+`twin`, `gone` — each with the command to run in the status output. `twin`: two notes for
+the same text and artist; only one is ever uploaded — the one already on this environment,
+else the one another environment's ledger has, else the first by path — and the other is
+left alone, so a text never gets the same recitation twice.
 
 ## Rules
 
