@@ -67,8 +67,8 @@ the source's samples.
 4. Read the output: `OK` (length read back and equal to the source), `SKIP` (done before,
    or already compressed), `FAIL … length check failed` (the new file was removed — report
    it, do not retry other settings), `WARNING: still over the 50 MB`.
-5. In a vault, if the notes describe the WAVs: `library-upload`'s
-   `python 4-SYSTEM/Skills/library-upload/scripts/audio_notes_to_m4a.py --write` points them at the .m4a
+5. In a vault, if the notes describe the WAVs: the vault script
+   `python 4-SYSTEM/scripts/audio_notes_to_m4a.py --write` points them at the .m4a
    (the WAV's details are kept under `converted_from:`).
 6. Report in plain words: how many converted, name / size before → after, where the files
    are, every `FAIL` quoted with its meaning.

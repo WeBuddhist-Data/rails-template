@@ -26,6 +26,7 @@ that is not found is not an error for the parser: `Recording.file` stays None.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -33,9 +34,17 @@ from pathlib import Path
 
 import yaml
 
-import sys  # noqa: E402
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from webuddhist.vault import FOLDERS, VAULT  # noqa: E402  (vault root and folders: one place)
+# A vault script: the vault is the folder this file sits in (4-SYSTEM/scripts/linter-audio/),
+# or $VAULT_ROOT. Folders default to the rails layout; a vault that differs sets them in
+# 4-SYSTEM/library-upload.json ("folders": {"audio": …, "text": …}), the file library-upload reads too.
+VAULT = Path(os.environ["VAULT_ROOT"]).resolve() if os.environ.get("VAULT_ROOT") \
+    else Path(__file__).resolve().parents[3]
+_FOLDERS = {"audio": "1-SOURCES/Audio", "text": "1-SOURCES/Text"}
+_CONFIG = VAULT / "4-SYSTEM" / "library-upload.json"
+if _CONFIG.is_file():
+    _FOLDERS.update({k: v for k, v in json.loads(_CONFIG.read_text(encoding="utf-8")).get("folders", {}).items()
+                     if k in _FOLDERS})
+FOLDERS = {k: VAULT / v for k, v in _FOLDERS.items()}
 
 NOTES_ROOT = FOLDERS["audio"]
 FILES_ROOT = Path(os.environ.get("AUDIO_FILES_DIR") or VAULT / "Audio")

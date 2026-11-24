@@ -16,7 +16,7 @@ Notes already pointing at an .m4a are left alone, so running it twice changes
 nothing. Line endings are kept. Dry run unless --write.
 
 Usage (from the vault root):
-    python 4-SYSTEM/Skills/library-upload/scripts/audio_notes_to_m4a.py [NOTE_OR_FOLDER ...] [--write] [--bitrate 128]
+    python 4-SYSTEM/scripts/audio_notes_to_m4a.py [NOTE_OR_FOLDER ...] [--write] [--bitrate 128]
 """
 from __future__ import annotations
 
