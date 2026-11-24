@@ -21,4 +21,4 @@ A script that belongs to exactly one skill lives in that skill's own `scripts/` 
 
 **Credentials never live in the repository.** A script that needs one reads it from the environment or from a `.env` file that is git-ignored, and ships a `.env.example` containing **placeholders only** — never a real address, password or token, even an expired one.
 
-**Generated output goes to `0-INBOX/`**, not into this folder.
+**A linter's or parser's output goes in its own `output/` folder** (`linter-root-text/output/`, `parser-root-text/output/`, `linter-audio/output/`, …): other tools read it from there (`library-upload`, `translation-alignment-check`). It is not git-ignored: it stays untracked while texts are only on dev/testing and is committed once they are on prod. Any other generated output goes to `0-INBOX/`, not into this folder.
