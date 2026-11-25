@@ -663,11 +663,15 @@ def write_yigchungs(stem, content, yigchungs):
 def write_durchens(stem, content, durchens):
     """Write the durchen payload: one item per footnote, sorted by span. Each
     item is exactly the body of POST /v2/editions/{edition_id}/durchens (one
-    POST per item — the endpoint takes a single object). Written even when
-    empty, so a file that loses its footnotes does not leave a stale payload.
+    POST per item — the endpoint takes a single object). Not written when there
+    are no durchens; a file left from an earlier run is removed, so a source
+    that loses its footnotes does not leave a stale payload.
     """
-    out = {"durchens": durchen.payload(durchens, len(content))}
     out_path = _out_dir(stem) / f"{stem}.durchens.json"
+    if not durchens:
+        out_path.unlink(missing_ok=True)
+        return None, None
+    out = {"durchens": durchen.payload(durchens, len(content))}
     out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     return out_path, out
 
@@ -870,8 +874,9 @@ def main(argv=None):
         if yig_out:
             print(f"OK    {source_path}  ->  {yig_out}")
         print(f"  yigchungs        : {len(yigchungs)}" + ("" if yig_out else " (no file written)"))
-        print(f"OK    {source_path}  ->  {dur_out}")
-        print(f"  durchens         : {len(durchens)}")
+        if dur_out:
+            print(f"OK    {source_path}  ->  {dur_out}")
+        print(f"  durchens         : {len(durchens)}" + ("" if dur_out else " (no file written)"))
         if fn_out:
             print(f"OK    {source_path}  ->  {fn_out}")
         print(f"  footnotes        : {len(footnotes)}" + ("" if fn_out else " (no file written)"))
